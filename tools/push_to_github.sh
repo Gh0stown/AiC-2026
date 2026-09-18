@@ -39,8 +39,14 @@ git branch -M main
 echo "origin = $(git remote get-url origin)"
 
 # ------------------------------------------------------------- 3. 连通性与权限
+# 注意: 不能用 `ls-remote --exit-code`。空仓库(建仓库时没勾 README)没有任何 ref,
+# 加上该参数会返回 2, 把"仓库是空的"误判成"访问失败"。
+# 不加时: 可访问=0(输出可能为空), 认证/权限失败=128。
 echo "检查远程仓库可否访问 ..."
-if ! git ls-remote --exit-code origin >/dev/null 2>&1; then
+LSREMOTE=$(git ls-remote origin 2>&1)
+RC=$?
+if [ $RC -ne 0 ]; then
+    echo "$LSREMOTE" >&2
     cat >&2 <<'MSG'
 访问失败。常见原因:
   * 地址写错了(尤其用户名/仓库名大小写), 或仓库还没在 GitHub 上创建
@@ -57,12 +63,14 @@ MSG
 fi
 
 # ------------------------------------------- 4. 远程非空时先合并(建仓库时勾了 README)
-if [ -n "$(git ls-remote origin HEAD 2>/dev/null)" ]; then
+if [ -n "$LSREMOTE" ]; then
     echo "远程已有提交, 先 rebase 合并 ..."
     git pull --rebase origin main || {
         echo "有冲突, 手动处理后重跑本脚本。" >&2
         exit 5
     }
+else
+    echo "远程是空仓库 ✓ 直接推送"
 fi
 
 # ------------------------------------------------------------------- 5. 推送
