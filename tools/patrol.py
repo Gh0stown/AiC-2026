@@ -8,13 +8,23 @@
 用法:
     python3 tools/patrol.py                          # 用 config/waypoints.yaml
     python3 tools/patrol.py --file xxx.yaml
-    python3 tools/patrol.py --dry-run                # 只打印路线, 不动
+    python3 tools/patrol.py --dry-run                # 只打印路线 + 各点旋转余量
     python3 tools/patrol.py --no-return-start        # 最后不回起点
     python3 tools/patrol.py --loop                   # 一直循环
     python3 tools/patrol.py --save-trace /tmp/t.csv  # 记录轨迹(画图用)
+    python3 tools/patrol.py --goal-includes-yaw      # 旧行为, 见下
+
+朝向是怎么处理的 (重要):
+    * 出发前用 cmd_vel 原地转到"行进方位" (--no-pre-rotate 可关)
+    * move_base 的**目标朝向 = 行进方向**, 也就是到点几乎不需要原地转
+    * 到点后若要某个朝向(航点的 yaw / 回程的 start_yaw), 再用 cmd_vel 原地摆正
+    => 所有原地转向都走 cmd_vel, **完全不经过规划器**。这样即使终点贴着墙,
+       也不会因为"转向余量 < 定位误差"被判成碰撞而偶发卡住, 180 度掉头也稳定。
+       旧行为(把最终朝向下给 move_base)可用 --goal-includes-yaw 恢复。
 
 航点文件格式 (world 和 pixel 二选一, pixel 按 coord_world_grid.png 那张图的像素):
-    start: [1.772, 1.782]
+    start: [1.772, 1.782]        # 出生点 (= navigation.launch 里的 spawn)
+    return_to: [1.672, 1.682]    # 可选: 最后回到哪 (不写就用 start)
     waypoints:
       - {name: A, pixel: [1138, 145]}          # 或 world: [1.709, 1.709]
       - {name: B, world: [0.0, -1.0], yaw: 1.57}   # 可选: 到点后再原地转到这个朝向
@@ -133,8 +143,14 @@ class Patrol(object):
         bearing = math.atan2(y - p[1], x - p[0])
         if self.a.pre_rotate:
             self.rotate_to(bearing)
-        ok, st = self.send_goal(x, y, yaw_final if yaw_final is not None else bearing,
-                                self.a.timeout)
+        # 默认**不**把最终朝向下给 move_base。否则规划器要在终点原地转一整圈,
+        # 而终点一旦靠近墙, 转向余量小于定位误差就会被判成碰撞, 表现为偶发卡住/
+        # 触发恢复行为。改成: move_base 只管开到位置(目标朝向=行进方向, 到点几乎
+        # 不用转), 到点后的朝向完全交给 rotate_to() —— 纯 cmd_vel, 不经过规划器,
+        # 180 度掉头也稳定。想要旧行为加 --goal-includes-yaw。
+        goal_yaw = yaw_final if (yaw_final is not None and self.a.goal_includes_yaw) \
+            else bearing
+        ok, st = self.send_goal(x, y, goal_yaw, self.a.timeout)
         if ok:
             if yaw_final is not None:
                 e_yaw = self.rotate_to(yaw_final)   # 到点后再把朝向摆正 (cmd_vel)
@@ -203,7 +219,10 @@ def main():
     ap.add_argument('--max-w', type=float, default=1.0, help='原地转向最大角速度')
     ap.add_argument('--k-w', type=float, default=1.2, help='转向 P 增益')
     ap.add_argument('--save-trace', help='把轨迹存成 csv')
-    ap.set_defaults(pre_rotate=True)
+    ap.add_argument('--goal-includes-yaw', dest='goal_includes_yaw', action='store_true',
+                    help='把最终朝向一起下给 move_base (旧行为)。默认不下: 先开到点, '
+                         '朝向交给 cmd_vel 原地摆正 —— 不经过规划器, 贴墙也不会卡')
+    ap.set_defaults(pre_rotate=True, goal_includes_yaw=False)
     a = ap.parse_args()
 
     wps, start, start_yaw, return_to = load(a.file)
