@@ -1,0 +1,91 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+    Tree Height: 640
+  - Class: rviz/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz/Grid
+      Enabled: true
+      Name: Grid
+      Cell Size: 0.5
+      Plane Cell Count: 12
+      Color: 100; 100; 100
+      Alpha: 0.4
+    - Class: rviz/RobotModel
+      Enabled: true
+      Name: RobotModel
+      Robot Description: robot_description
+      Visual Enabled: true
+    - Class: rviz/LaserScan
+      Enabled: true
+      Name: Lidar2DScan
+      Topic: /scan
+      Style: Points
+      Size (Pixels): 3
+      Color: 60; 220; 60
+      Color Transformer: FlatColor
+      Decay Time: 0
+    # ★ 注意: gazebo_ros_block_laser 发的是**老的** sensor_msgs/PointCloud,
+    #   不是 PointCloud2。所以这里必须用 rviz/PointCloud 这个显示类,
+    #   用 rviz/PointCloud2 会报类型不匹配、看不到点云。
+    - Class: rviz/PointCloud2
+      Enabled: false
+      Name: Lidar3D_filtered
+      Topic: /points_filtered
+      Style: Points
+      Size (Pixels): 2
+      Color Transformer: AxisColor
+      Decay Time: 0
+    - Class: rviz/PointCloud
+      Enabled: false
+      Name: Lidar3D_raw
+      Topic: /points
+      Style: Points
+      Size (Pixels): 2
+      Color Transformer: AxisColor
+      Decay Time: 0
+    - Class: rviz/TF
+      Enabled: true
+      Name: TF
+      Show Names: false
+      Marker Scale: 0.3
+    - Class: rviz/Image
+      Enabled: false
+      Name: DepthImage
+      Topic: /camera/depth/image_raw
+    - Class: rviz/Image
+      Enabled: false
+      Name: RGBImage
+      Topic: /camera/rgb/image_raw
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: odom
+    Frame Rate: 30
+  Tools:
+    - Class: rviz/MoveCamera
+    - Class: rviz/SetInitialPose
+      Topic: /initialpose
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 3.0
+      Enable Stereo Rendering: false
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0.2
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05
+      Invert Z Axis: false
+      Name: Orbit
+      Near Clip Distance: 0.01
+      Pitch: 0.6
+      Target Frame: <Fixed Frame>
+      Yaw: 0.8
+    Saved: ~
+Window Geometry:
+  Height: 900
+  Width: 1500

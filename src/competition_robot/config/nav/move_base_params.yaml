@@ -1,0 +1,12 @@
+shutdown_costmaps: false
+controller_frequency: 10.0
+planner_frequency: 1.0
+planner_patience: 3.0
+controller_patience: 5.0
+conservative_reset_dist: 2.0
+oscillation_timeout: 10.0
+oscillation_distance: 0.2
+recovery_behavior_enabled: true
+clearing_rotation_allowed: true
+# base_global_planner / base_local_planner 由 navigation.launch 的
+# planner:= / global:= 参数决定 (见 launch 文件)

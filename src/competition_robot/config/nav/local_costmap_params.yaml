@@ -1,0 +1,26 @@
+local_costmap:
+  global_frame: odom
+  robot_base_frame: base_footprint
+  update_frequency: 5.0
+  publish_frequency: 2.0
+  transform_tolerance: 0.5
+  static_map: false
+  rolling_window: true
+  width: 4.5          # 场地才 4.2 m, 局部地图给整场大小就够
+  height: 4.5
+  resolution: 0.05
+  # ★★ 必须: 局部地图里"未知"要当成可走。
+  #    否则车自己脚下的格子(激光被自己挡住/贴墙时前方全是 inf 清不到)会留在 -1(未知),
+  #    所有候选轨迹都判"撞未知区" -> 无有效控制 -> 恢复行为也拒绝 -> abort。
+  #    实测现象: 在墙角离目标只剩 5 cm 却永远到不了, 日志报
+  #    "Rotate recovery can't rotate in place ... Cost: -1.00"。
+  obstacle_layer:
+    track_unknown_space: false
+  # ★★ 局部地图**故意不放膨胀层**:
+  #    costmap_2d 的膨胀层会沿着障碍画一圈 inscribed_radius(由足迹顶点算出=0.179 m)的
+  #    "内切禁区"(cost=253), 而 DWA 把 253 当碰撞 -> 车心被挡在离墙 0.18+车体前凸0.20
+  #    ≈ 0.38 m 处, 物理上明明还能再走 0.15 m (实测墙角目标 (1.82,1.82) 卡住)。
+  #    没有膨胀层时, 墙只剩"致命格"(254), 由 DWA 的**多边形足迹**做碰撞判断
+  #    -> 能贴到物理极限, 而且不会撞 (全局地图仍有膨胀, 路径照样不贴墙)。
+  plugins:
+    - {name: obstacle_layer,  type: "costmap_2d::ObstacleLayer"}

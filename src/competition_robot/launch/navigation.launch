@@ -1,0 +1,99 @@
+<?xml version="1.0"?>
+<!--
+  定位 + 导航: 静态地图 (map_server) + AMCL + move_base
+
+    roslaunch competition_robot navigation.launch                    # 默认 DWA (实测最稳)
+    roslaunch competition_robot navigation.launch planner:=teb       # TEB (中场目标最丝滑)
+    roslaunch competition_robot navigation.launch planner:=traj      # 老的 TrajectoryPlanner
+
+  ★ 实测对比 (同一套测法, tools/bench_nav.sh):
+      直线 3 m 横向偏差    直线到点   斜线+贴墙目标(-1.5,-1.5)   中场转弯目标(0,-1.0)
+      DWA      5 mm        ✓ 9.1 s          ✓ 13.9 s               —
+      TEB     54 mm        ✓ 8.9 s          ✗ 摆头/超时              ✓ 9.2 s 零原地转
+      traj     3 mm        ✓10.9 s          ✓ 19.0 s (原地转0.8s)    —
+    => 默认 DWA (哪儿都能到); 目标离墙 ≥0.6 m 时 TEB 更快更丝滑(无原地转)。
+    装 TEB/DWA:  sudo apt install ros-noetic-dwa-local-planner ros-noetic-teb-local-planner
+      # 可选: sudo apt install ros-noetic-dwa-local-planner
+
+  常用参数:
+    planner:=teb|dwa|traj   局部规划器 (默认 teb)
+    gplan:=navfn|global     全局规划器 (global 需要 ros-noetic-global-planner)
+    map:=<yaml>     换地图 (默认 maps/arena_clean.yaml = 几何生成的干净图;
+                    SLAM 建的那张是 maps/arena.yaml)
+    sim:=false      仿真已经在跑的时候用 (不重复起 Gazebo)
+    gui:=false      不开 Gazebo 界面 (省显卡)
+    rviz:=false     不开 RViz
+    x:= y:= yaw:=   出生位姿 (同时也是 AMCL 的初始位姿)
+
+  用法:
+    1. RViz 里先用 "2D Pose Estimate" 点一下车的位置 (或者直接信 launch 给的初始位姿)
+    2. 用 "2D Nav Goal" 点目标点 -> 车自己开过去
+    3. 想对比不同规划器: bash tools/bench_nav.sh teb   (见脚本注释)
+
+  为什么要换掉 TrajectoryPlanner (实测现象):
+    - "走得不直、蛇形"     : 它的打分函数在横移方向太平, 而且前瞻只有 1.5 s
+    - "快到点才调方向, 然后原地转圈": latch_xy_goal_tolerance=true 的固有行为
+    TEB 是把整条轨迹当优化问题解, 输出连续曲率的光滑轨迹;
+    DWA 次之; TrajectoryPlanner 最老, 只作为"没装东西时能跑"的保底。
+-->
+<launch>
+  <!-- 默认用"几何生成的干净地图"(边界准、墙薄、坐标系=世界系)。
+       想换回 SLAM 建的那张: map:=$(find competition_robot)/maps/arena.yaml
+       重新生成: python3 tools/gen_map_from_arena.py -->
+  <arg name="map"  default="$(find competition_robot)/maps/arena_clean.yaml"/>
+  <arg name="sim"  default="true"/>
+  <arg name="gui"  default="true"/>
+  <arg name="rviz" default="true"/>
+  <arg name="x"    default="1.772"/>
+  <arg name="y"    default="1.782"/>
+  <arg name="yaw"  default="3.1416"/>
+  <!-- 局部规划器: teb / dwa / traj  ->  插件类名 -->
+  <arg name="planner" default="dwa"/>
+  <arg name="local_planner" default="$(eval {'teb': 'teb_local_planner/TebLocalPlannerROS',
+                                             'dwa': 'dwa_local_planner/DWAPlannerROS',
+                                             'traj': 'base_local_planner/TrajectoryPlannerROS'}[planner])"/>
+  <!-- 全局规划器: navfn (自带) / global (需要 ros-noetic-global-planner)
+       ★ 参数名不能叫 global —— 那是 python 关键字, $(eval) 里会语法错误 -->
+  <arg name="gplan" default="navfn"/>
+  <arg name="global_planner" default="$(eval {'navfn': 'navfn/NavfnROS',
+                                              'global': 'global_planner/GlobalPlanner'}[gplan])"/>
+
+  <include if="$(arg sim)" file="$(find competition_robot)/launch/robot_gazebo.launch">
+    <arg name="rviz" value="false"/>
+    <arg name="gui"  value="$(arg gui)"/>
+    <arg name="x"   value="$(arg x)"/>
+    <arg name="y"   value="$(arg y)"/>
+    <arg name="yaw" value="$(arg yaw)"/>
+  </include>
+
+  <!-- 静态地图 -->
+  <node name="map_server" pkg="map_server" type="map_server" args="$(arg map)"/>
+
+  <!-- AMCL 定位 -->
+  <node name="amcl" pkg="amcl" type="amcl" output="screen">
+    <rosparam file="$(find competition_robot)/config/nav/amcl_params.yaml" command="load"/>
+    <!-- 初始位姿 = 出生位姿 (地图坐标系 ≈ 世界坐标系) -->
+    <param name="initial_pose_x" value="$(arg x)"/>
+    <param name="initial_pose_y" value="$(arg y)"/>
+    <param name="initial_pose_a" value="$(arg yaw)"/>
+  </node>
+
+  <!-- move_base: 三个局部规划器的参数都 load 进来 (各自独立命名空间, 不冲突),
+       然后由 planner:= 决定实际用哪一个 -->
+  <node name="move_base" pkg="move_base" type="move_base" respawn="false" output="screen">
+    <rosparam file="$(find competition_robot)/config/nav/move_base_params.yaml"       command="load"/>
+    <rosparam file="$(find competition_robot)/config/nav/costmap_common_params.yaml"  command="load" ns="global_costmap"/>
+    <rosparam file="$(find competition_robot)/config/nav/costmap_common_params.yaml"  command="load" ns="local_costmap"/>
+    <rosparam file="$(find competition_robot)/config/nav/global_costmap_params.yaml"  command="load"/>
+    <rosparam file="$(find competition_robot)/config/nav/global_planner_params.yaml"  command="load"/>
+    <rosparam file="$(find competition_robot)/config/nav/local_costmap_params.yaml"   command="load"/>
+    <rosparam file="$(find competition_robot)/config/nav/base_local_planner_params.yaml" command="load"/>
+    <rosparam file="$(find competition_robot)/config/nav/dwa_local_planner_params.yaml"  command="load"/>
+    <rosparam file="$(find competition_robot)/config/nav/teb_local_planner_params.yaml"  command="load"/>
+    <param name="base_local_planner"  value="$(arg local_planner)"/>
+    <param name="base_global_planner" value="$(arg global_planner)"/>
+  </node>
+
+  <node if="$(arg rviz)" pkg="rviz" type="rviz" name="rviz"
+        args="-d $(find competition_robot)/rviz/nav.rviz" required="false"/>
+</launch>

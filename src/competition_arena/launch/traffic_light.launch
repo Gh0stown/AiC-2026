@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!--
+  临时红绿灯的**切换节点**（灯本身随 world 一起加载, 见 tools/setup_traffic_lights.py）
+
+    # 1) 先把灯装进 world (只需一次; 之后重启仿真就带着灯)
+    python3 tools/setup_traffic_lights.py
+    # 2) 起仿真 (robot_gazebo.launch 会把 competition_arena/models 加进 GAZEBO_MODEL_PATH)
+    roslaunch competition_robot robot_gazebo.launch
+    # 3) 起切换节点
+    roslaunch competition_arena traffic_light.launch
+
+  手动测试:
+    rostopic pub -1 /traffic_light/command std_msgs/String "data: 'red'"
+    rostopic pub -1 /traffic_light/command std_msgs/String "data: 'auto'"
+    rostopic echo /traffic_light/state
+-->
+<launch>
+  <node name="traffic_light" pkg="competition_arena" type="traffic_light.py" output="screen">
+    <param name="config" value="$(find competition_arena)/config/traffic_lights.yaml"/>
+  </node>
+</launch>

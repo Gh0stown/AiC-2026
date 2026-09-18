@@ -1,0 +1,42 @@
+# 局部规划器: base_local_planner/TrajectoryPlannerROS —— 最老的一个, 只作保底
+#   roslaunch competition_robot navigation.launch planner:=traj
+#
+# ★ 实测它有两个毛病, 所以默认换成了 TEB:
+#   1) holonomic_robot: true 时打分函数在横移方向太平 -> 走直线会蛇形。
+#      这里改成 false(差速模式): 麦轮照样能执行(插件会把 vx/wz 解算到四个轮子),
+#      车头顺着路径走, 明显直得多。
+#   2) latch_xy_goal_tolerance: true 时, 一进容差就停止平移、原地转到目标朝向
+#      -> 就是"快到点才调方向, 然后原地转圈"。这里关了。
+TrajectoryPlannerROS:
+  holonomic_robot: false
+  max_vel_x: 0.35
+  min_vel_x: 0.0
+  max_vel_theta: 1.2
+  min_vel_theta: 0.2
+  min_in_place_vel_theta: 0.6
+  acc_lim_x: 1.0
+  acc_lim_y: 0.5
+  acc_lim_theta: 2.5
+  # holonomic 时采样的横向速度 (m/s)
+  y_vels: [-0.15, -0.05, 0.05, 0.15]
+
+  sim_time: 3.0
+  sim_granularity: 0.05
+  vx_samples: 6
+  vtheta_samples: 20
+  controller_frequency: 10.0
+
+  # 打分: 贴着全局路径 + 朝目标
+  meter_scoring: true
+  pdist_scale: 0.6
+  gdist_scale: 0.8
+  occdist_scale: 0.05
+  heading_lookahead: 0.325
+  heading_scoring: false
+  oscillation_reset_dist: 0.05
+  prune_plan: true
+  dwa: true
+
+  xy_goal_tolerance: 0.20
+  yaw_goal_tolerance: 0.25
+  latch_xy_goal_tolerance: false

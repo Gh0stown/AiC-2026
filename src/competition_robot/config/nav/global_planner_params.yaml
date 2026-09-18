@@ -1,0 +1,26 @@
+# 全局规划器参数 (navfn 和 global_planner 两套都写, 用哪个由 launch 的 gplan:= 决定)
+#
+# ★ default_tolerance 是关键: 目标点如果落在**膨胀区/障碍格里**(比如贴着墙的墙角),
+#   规划器会在这个半径内找一个最近的可达格子作为"实际目标", 这样 move_base 会正常
+#   结束(而不是一直够不到、反复恢复行为)。不设的话贴墙目标就是"永远到不了"。
+NavfnROS:
+  default_tolerance: 0.30
+  allow_unknown: true
+  use_dijkstra: true
+  use_quadratic: true
+  use_grid_path: false
+  old_navfn_behavior: false
+  visualize_potential: false
+
+GlobalPlanner:
+  default_tolerance: 0.30
+  allow_unknown: true
+  use_dijkstra: true
+  use_quadratic: true
+  use_grid_path: false
+  old_navfn_behavior: false
+  orientation_mode: 0
+  orientation_window_size: 1
+  cost_factor: 0.55
+  neutral_cost: 66
+  lethal_cost: 253

@@ -1,0 +1,67 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+    Tree Height: 620
+  - Class: rviz/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz/Grid
+      Enabled: true
+      Name: Grid
+      Cell Size: 0.5
+      Plane Cell Count: 12
+      Color: 100; 100; 100
+      Alpha: 0.4
+    - Class: rviz/RobotModel
+      Enabled: true
+      Name: RobotModel
+      Robot Description: robot_description
+      Visual Enabled: true
+    - Class: rviz/LaserScan
+      Enabled: true
+      Name: LaserScan
+      Topic: /scan
+      Style: Points
+      Size (Pixels): 3
+      Color: 255; 60; 60
+      Color Transformer: FlatColor
+      Decay Time: 0
+    - Class: rviz/TF
+      Enabled: true
+      Name: TF
+      Show Names: false
+      Marker Scale: 0.3
+    - Class: rviz/Image
+      Enabled: false
+      Name: Camera
+      Topic: /camera/image_raw
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: odom
+    Frame Rate: 30
+  Tools:
+    - Class: rviz/MoveCamera
+    - Class: rviz/SetInitialPose
+      Topic: /initialpose
+    - Class: rviz/SetGoal
+      Topic: /move_base_simple/goal
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Name: TopDown
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Distance: 6.0
+      Pitch: 1.55
+      Yaw: 0.0
+      Target Frame: <Fixed Frame>
+      Near Clip Distance: 0.01
+      Value: Orbit (rviz)
+    Saved: ~
+Window Geometry:
+  Height: 900
+  Width: 1400

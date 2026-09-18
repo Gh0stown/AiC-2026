@@ -1,0 +1,79 @@
+<?xml version="1.0"?>
+<!--
+  GMapping 建图 (最常用的 2D 激光 SLAM)
+
+    roslaunch competition_robot slam_gmapping.launch
+
+  常用参数:
+    sim:=false     不启动仿真 (仿真已经在跑的时候用)
+    rviz:=false    不开 RViz
+    gui:=false     不开 Gazebo 界面 (只留 RViz, 显卡压力小一半, 推荐)
+    x:= y:= yaw:=  出生位姿
+
+  需要: sudo apt install ros-noetic-gmapping
+  存地图: rosrun map_server map_saver -f ~/桌面/人工智能算法大赛/maps/my_map
+-->
+<launch>
+  <arg name="sim"  default="true"/>
+  <arg name="rviz" default="true"/>
+  <arg name="gui"  default="true"/>
+  <arg name="x"    default="1.772"/>
+  <arg name="y"    default="1.782"/>
+  <arg name="yaw"  default="3.1416"/>
+  <!-- gmapping 调参入口: 想 A/B 直接命令行覆盖, 不用改文件。
+       例: roslaunch competition_robot slam_gmapping.launch particles:=60 delta:=0.03
+       下面的默认值是实测选出来的 (2026-09-17, 5 m 直行+转弯):
+         delta .05/30 粒子   -> SLAM 相对里程计误差 中位 0.19 m
+         delta .03/60 粒子   -> 0.06 m   (就是现在这组) -->
+  <arg name="delta"        default="0.03"/>   <!-- 地图分辨率 m -->
+  <arg name="sigma"        default="0.03"/>   <!-- 匹配用的高斯 sigma -->
+  <arg name="particles"    default="60"/>
+  <arg name="lstep"        default="0.02"/>   <!-- 平移搜索步长 m -->
+  <arg name="astep"        default="0.02"/>   <!-- 角度搜索步长 rad -->
+  <arg name="iterations"   default="8"/>
+  <arg name="minimumScore" default="50"/>
+
+  <include if="$(arg sim)" file="$(find competition_robot)/launch/robot_gazebo.launch">
+    <arg name="rviz" value="false"/>
+    <arg name="gui"  value="$(arg gui)"/>
+    <arg name="x"   value="$(arg x)"/>
+    <arg name="y"   value="$(arg y)"/>
+    <arg name="yaw" value="$(arg yaw)"/>
+  </include>
+
+  <node pkg="gmapping" type="slam_gmapping" name="slam_gmapping" output="screen">
+    <param name="base_frame"   value="base_footprint"/>
+    <param name="odom_frame"   value="odom"/>
+    <param name="map_frame"    value="map"/>
+    <param name="scan_topic"   value="scan"/>
+    <param name="delta"        value="$(arg delta)"/>
+    <param name="maxUrange"    value="30.0"/>
+    <param name="maxRange"     value="30.0"/>
+    <param name="sigma"        value="$(arg sigma)"/>
+    <param name="kernelSize"   value="1"/>
+    <param name="lstep"        value="$(arg lstep)"/>
+    <param name="astep"        value="$(arg astep)"/>
+    <param name="iterations"   value="$(arg iterations)"/>
+    <param name="lsigma"       value="0.075"/>
+    <param name="ogain"        value="3.0"/>
+    <param name="lskip"        value="0"/>
+    <param name="minimumScore" value="$(arg minimumScore)"/>
+    <!-- 什么时候更新地图: 走 10cm 或转 10 度 -->
+    <param name="linearUpdate"  value="0.10"/>
+    <param name="angularUpdate" value="0.10"/>
+    <param name="temporalUpdate" value="1.0"/>
+    <param name="resampleThreshold" value="0.5"/>
+    <param name="particles"    value="$(arg particles)"/>
+    <param name="xmin" value="-10.0"/>
+    <param name="ymin" value="-10.0"/>
+    <param name="xmax" value="10.0"/>
+    <param name="ymax" value="10.0"/>
+    <param name="llsamplerange" value="0.01"/>
+    <param name="llsamplestep"  value="0.01"/>
+    <param name="lasamplerange" value="0.005"/>
+    <param name="lasamplestep"  value="0.005"/>
+  </node>
+
+  <node if="$(arg rviz)" pkg="rviz" type="rviz" name="rviz"
+        args="-d $(find competition_robot)/rviz/mapping.rviz" required="false"/>
+</launch>

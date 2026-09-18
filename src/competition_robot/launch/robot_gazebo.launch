@@ -1,0 +1,109 @@
+<?xml version="1.0"?>
+<!--
+  启动 4.2x4.2 比赛场地 + 四轮麦克纳姆机器人
+
+    roslaunch competition_robot robot_gazebo.launch
+
+  常用参数:
+    world:=<path>       换世界文件 (默认用 competition_arena 的场地)
+    gui:=false          无 Gazebo 界面
+    rviz:=false         无 RViz
+    encoders:=false     不启动"理想编码器 + 里程计" (只看运动时用)
+    x:= y:= z:= yaw:=   机器人初始位姿
+
+  关于 /odom:
+    /odom             由 mecanum_odometry.py 从轮式编码器积分得到 (仿真/真机通用)
+    /odom_groundtruth Gazebo 真值, 只做对比调试用
+-->
+<launch>
+  <arg name="world"    default="$(find competition_arena)/worlds/competition_arena.world"/>
+  <arg name="gui"      default="true"/>
+  <arg name="rviz"     default="true"/>
+  <arg name="paused"   default="false"/>
+  <arg name="encoders" default="true"/>
+  <!-- 出生位姿: 场地**右上角**区域, 车头朝左 (世界 -x 方向)。
+       场地内部是空的 (只有外沿一圈墙), 所以这里就是个空位置, 车能自由开。
+       改这里, 或者命令行传 x:= y:= yaw:= 都可以。 -->
+  <arg name="x"        default="1.772"/>
+  <arg name="y"        default="1.782"/>
+  <arg name="z"        default="0.03"/>
+  <arg name="yaw"      default="3.1416"/>   <!-- 180 度, 车头朝图里的左边 -->
+  <arg name="robot"    default="competition_robot"/>
+
+  <!-- 场地包和机器人包都要在 Gazebo 资源路径里 (贴图 / 材质) -->
+  <env name="GAZEBO_RESOURCE_PATH"
+       value="$(find competition_arena):$(find competition_robot):/usr/share/gazebo-11:$(optenv GAZEBO_RESOURCE_PATH)"/>
+  <!-- 场地里的 model:// 模型 (红绿灯等) 在这里 -->
+  <env name="GAZEBO_MODEL_PATH"
+       value="$(find competition_arena)/models:$(optenv GAZEBO_MODEL_PATH)"/>
+
+  <!-- 唯一真值源, 仿真和真机都读它 -->
+  <rosparam command="load"
+            file="$(find competition_robot)/config/robot_params.yaml"
+            ns="/robot_params"/>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name"   value="$(arg world)"/>
+    <arg name="paused"       value="$(arg paused)"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="gui"          value="$(arg gui)"/>
+    <arg name="headless"     value="false"/>
+    <arg name="debug"        value="false"/>
+  </include>
+
+  <!-- URDF 由 config/robot_params.yaml 生成: python3 scripts/gen_robot.py -->
+  <param name="robot_description"
+         textfile="$(find competition_robot)/urdf/competition_robot.urdf"/>
+
+  <node name="robot_state_publisher" pkg="robot_state_publisher"
+        type="robot_state_publisher">
+    <param name="publish_frequency" value="50.0"/>
+  </node>
+
+  <node name="spawn_$(arg robot)" pkg="gazebo_ros" type="spawn_model"
+        args="-urdf -param robot_description -model $(arg robot)
+              -x $(arg x) -y $(arg y) -z $(arg z) -Y $(arg yaw)"
+        respawn="false" output="screen"/>
+
+  <!-- /scan 现在由 **2D 雷达** (lidar2d, gazebo_ros_laser) 直接发真正的 LaserScan,
+       和实车一致。下面这个"3D 点云切一层"的节点默认**不开**:
+       3D 那颗默认也关掉了 (block_laser 插件贴墙时会给出不可能的回波, 见
+       config/robot_params.yaml 里的说明)。要用 3D 就:
+         robot_params.yaml 里 lidar3d.enabled: true  ->  python3 scripts/gen_robot.py
+         roslaunch ... scan_from_cloud:=true -->
+  <arg name="scan_from_cloud" default="false"/>
+  <node if="$(arg scan_from_cloud)" name="pointcloud_to_scan" pkg="competition_robot"
+        type="pointcloud_to_scan.py" output="screen">
+    <param name="input" value="points"/>
+    <param name="output" value="scan"/>
+    <param name="height_min" value="-0.15"/>
+    <param name="height_max" value="0.15"/>
+    <param name="angle_min_deg" value="-180.0"/>
+    <param name="angle_max_deg" value="180.0"/>
+    <param name="angle_step_deg" value="1.0"/>
+    <rosparam param="range">[0.2, 30.0]</rosparam>
+    <!-- ★ 必须做: 3D 雷达的下俯光束会打到自己车顶, 在车尾形成一个跟着车走的
+         假回波扇形 (实测 67 束 @ 0.207 m)。不过滤的话 gmapping 会被它拖歪:
+         直行 1.7 m, SLAM 只前进 0.82 m, yaw 还偏了 16°, 图整体歪掉。 -->
+    <param name="self_filter_from_robot" value="true"/>
+    <param name="self_filter_margin" value="0.01"/>
+    <!-- 顺手把"SLAM 实际看到的那层点"发出来给 RViz 看 -->
+    <param name="output_cloud" value="points_filtered"/>
+  </node>
+
+  <!-- 理想编码器 (仅仿真): /cmd_vel -> 四轮转角 -> /joint_states -->
+  <node if="$(arg encoders)" name="sim_wheel_encoders" pkg="competition_robot"
+        type="sim_wheel_encoders.py" output="screen">
+    <param name="rate" value="50.0"/>
+  </node>
+
+  <!-- 轮式里程计 (仿真/真机共用): /joint_states -> /odom + TF -->
+  <node if="$(arg encoders)" name="mecanum_odometry" pkg="competition_robot"
+        type="mecanum_odometry.py" output="screen">
+    <!-- ★ 必须和上面的出生位姿一致, 否则 /odom 会整体偏出去 -->
+    <rosparam param="initial_pose" subst_value="true">[$(arg x), $(arg y), $(arg yaw)]</rosparam>
+  </node>
+
+  <node if="$(arg rviz)" name="rviz" pkg="rviz" type="rviz"
+        args="-d $(find competition_robot)/rviz/robot.rviz" required="false"/>
+</launch>

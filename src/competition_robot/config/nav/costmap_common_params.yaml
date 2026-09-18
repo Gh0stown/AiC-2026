@@ -1,0 +1,52 @@
+# 全局/局部代价地图共用的参数 (被 load 进 global_costmap 和 local_costmap 两个 ns)
+#
+# ★ 关于"墙有多厚"(实测 src/competition_robot/maps/arena.pgm):
+#     真实场地墙体       24 mm
+#     地图里的墙(占用格)  2 格 = 100 mm   <- karto 的占用栅格会"糊", 4 倍厚
+#     代价地图自由区边界  离墙内沿约 60 mm
+#   所以能用的空间比想象的小: 车体 inscribed 半径 0.19 m + 地图墙 0.10 m
+#   => 目标点离墙内沿至少要留 0.30 m (map 系里 |x|,|y| ≲ 1.75), 不然车体放不下。
+#
+# 车体轮廓 —— 用**八边形**贴着车体画, 四个空着的角切掉。
+# 为什么重要: costmap 的 inscribed_radius = "原点(车心)到各顶点的最小距离"。
+#   车壳    x[-0.140, 0.193] y[-0.109, 0.109]
+#   轮子外沿 x[-0.128, 0.176] y[±0.171]  (前轮轴 +0.1272, 后轮轴 -0.0798)
+#   矩形足迹 [[-0.17,-0.19]...[0.21,0.19]] 的最小顶点距离 = 0.255 m
+#     -> 墙边 0.26 m 以内全算"内切碰撞", 墙角目标根本够不到
+#   八边形最小顶点距离 = 0.179 m  -> 同样覆盖车身/车轮, 但禁区小了 7.6 cm
+footprint: [[-0.145, -0.105], [-0.128, -0.175], [0.176, -0.175], [0.200, -0.140],
+            [0.200, 0.140], [0.176, 0.175], [-0.128, 0.175], [-0.145, 0.105]]
+footprint_padding: 0.01
+
+# 障碍层: 吃 /scan (2D 雷达, 0.1~6 m)
+obstacle_layer:
+  enabled: true
+  combination_method: 1
+  track_unknown_space: true
+  obstacle_range: 4.0
+  raytrace_range: 4.5
+  observation_sources: scan
+  scan:
+    data_type: LaserScan
+    topic: /scan
+    marking: true
+    clearing: true
+    max_obstacle_height: 0.6
+    min_obstacle_height: 0.0
+    expected_update_rate: 0.2
+    observation_persistence: 0.0
+    inf_is_valid: false
+
+# 膨胀层。
+# ★ 场地只有 4.2 m, 而且**地图里墙本身就有 2 格(0.10 m)厚**(karto 占用栅格糊出来的,
+#   真实墙体才 24 mm), 自由区已经向内缩了 ~6 cm。再叠加 0.35/0.25 的膨胀, 墙角能用的
+#   地方就没了 -> 贴墙目标到不了。
+#   现在: 0.18 + 衰减 3.0。(车体 inscribed 半径 0.19 由 footprint 自动算, 与这个无关)
+inflation_layer:
+  enabled: true
+  cost_scaling_factor: 3.0
+  inflation_radius: 0.18
+
+static_layer:
+  enabled: true
+  map_topic: /map

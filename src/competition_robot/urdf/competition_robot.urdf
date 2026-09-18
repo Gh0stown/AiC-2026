@@ -1,0 +1,332 @@
+<?xml version="1.0"?>
+<!--
+  competition_robot —— 由 scripts/gen_robot.py 自动生成, 请勿手改。
+  改参数请编辑 config/robot_params.yaml, 然后重新运行:
+      python3 scripts/gen_robot.py
+
+  生成时间   : 2026-09-17 03:10:22
+  底盘构型   : 四轮麦克纳姆 (X 型布局)
+  轮径/轮宽  : 0.0485 / 0.0506 m
+  轴距/轮距  : 0.2070 / 0.2908 m
+  前/后轮 x  : +0.1272 / -0.0798 m  (前后不对称, 自转系数 0.2726 / 0.2252)
+  整车质量   : 1.85 kg (车体) + 4 x 0.05 kg (轮) = 2.06 kg
+  base_link  : 与 base_footprint 重合, 都在地面 (和实车一致)
+  车体中心   : 相对 base_link 偏移 0.0265 0.0000 0.0974
+  驱动方式   : planar_move
+-->
+<robot name="competition_robot">
+
+  <material name="chassis"><color rgba="0.22 0.24 0.28 1.0"/></material>
+  <material name="wheel_hub"><color rgba="0.85 0.45 0.10 1.0"/></material>
+  <material name="wheel_roller"><color rgba="0.20 0.20 0.22 1.0"/></material>
+  <material name="sensor"><color rgba="0.15 0.65 0.85 1.0"/></material>
+
+  <!-- 贴地投影, 导航/定位用 -->
+  <link name="base_footprint"/>
+  <joint name="base_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- 车体 -->
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="package://competition_robot/meshes/mecanum/base_link.STL"/></geometry>
+      <material name="chassis"/>
+    </visual>
+    <collision>
+      <origin xyz="0.0265 0 0.0974" rpy="0 0 0"/>
+      <geometry><box size="0.3334 0.2187 0.1397"/></geometry>
+    </collision>
+      <inertial>
+        <origin xyz="0.0265 0 0.0974" rpy="0 0 0"/>
+        <mass value="1.85"/>
+        <inertia ixx="0.010382" ixy="0" ixz="0" iyy="0.020145" iyz="0" izz="0.02451"/>
+      </inertial>
+  </link>
+
+  <!-- ================= 麦克纳姆轮 ================= -->
+  <!-- 轮心相对 base_link: z=0.0485 (轮心离地 0.0485 m) -->
+
+  <link name="fl_wheel_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="package://competition_robot/meshes/mecanum/front_left_wheel.STL"/></geometry>
+      <material name="wheel_hub"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.5707963 0 0"/>
+      <geometry><cylinder radius="0.0485" length="0.0506"/></geometry>
+    </collision>
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.0515"/>
+        <inertia ixx="0.000041" ixy="0" ixz="0" iyy="0.000061" iyz="0" izz="0.000041"/>
+      </inertial>
+  </link>
+  <joint name="fl_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="fl_wheel_link"/>
+    <origin xyz="0.1272 0.1454 0.0485" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <dynamics damping="0.02" friction="0.0"/>
+  </joint>
+  <gazebo reference="fl_wheel_link">
+    <!-- 麦轮各向异性摩擦: 沿滚动方向(+x)高摩擦 -> 能驱动;
+         沿轮轴方向(+y)低摩擦 -> 允许横移。mu1=fdir1 方向, mu2=垂直方向。
+         不加这个的话, planar_move 发的 vy 会被轮子侧向刮地摩擦直接吃掉。 -->
+    <mu1>1</mu1>
+    <mu2>0.005</mu2>
+    <fdir1>1 0 0</fdir1>
+    <kp>1000000.0</kp><kd>100.0</kd>
+  </gazebo>
+
+  <link name="fr_wheel_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="package://competition_robot/meshes/mecanum/front_right_wheel.STL"/></geometry>
+      <material name="wheel_hub"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.5707963 0 0"/>
+      <geometry><cylinder radius="0.0485" length="0.0506"/></geometry>
+    </collision>
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.0515"/>
+        <inertia ixx="0.000041" ixy="0" ixz="0" iyy="0.000061" iyz="0" izz="0.000041"/>
+      </inertial>
+  </link>
+  <joint name="fr_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="fr_wheel_link"/>
+    <origin xyz="0.1272 -0.1454 0.0485" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <dynamics damping="0.02" friction="0.0"/>
+  </joint>
+  <gazebo reference="fr_wheel_link">
+    <!-- 麦轮各向异性摩擦: 沿滚动方向(+x)高摩擦 -> 能驱动;
+         沿轮轴方向(+y)低摩擦 -> 允许横移。mu1=fdir1 方向, mu2=垂直方向。
+         不加这个的话, planar_move 发的 vy 会被轮子侧向刮地摩擦直接吃掉。 -->
+    <mu1>1</mu1>
+    <mu2>0.005</mu2>
+    <fdir1>1 0 0</fdir1>
+    <kp>1000000.0</kp><kd>100.0</kd>
+  </gazebo>
+
+  <link name="rl_wheel_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="package://competition_robot/meshes/mecanum/back_left_wheel.STL"/></geometry>
+      <material name="wheel_hub"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.5707963 0 0"/>
+      <geometry><cylinder radius="0.0485" length="0.0506"/></geometry>
+    </collision>
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.0515"/>
+        <inertia ixx="0.000041" ixy="0" ixz="0" iyy="0.000061" iyz="0" izz="0.000041"/>
+      </inertial>
+  </link>
+  <joint name="rl_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="rl_wheel_link"/>
+    <origin xyz="-0.0798 0.1454 0.0485" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <dynamics damping="0.02" friction="0.0"/>
+  </joint>
+  <gazebo reference="rl_wheel_link">
+    <!-- 麦轮各向异性摩擦: 沿滚动方向(+x)高摩擦 -> 能驱动;
+         沿轮轴方向(+y)低摩擦 -> 允许横移。mu1=fdir1 方向, mu2=垂直方向。
+         不加这个的话, planar_move 发的 vy 会被轮子侧向刮地摩擦直接吃掉。 -->
+    <mu1>1</mu1>
+    <mu2>0.005</mu2>
+    <fdir1>1 0 0</fdir1>
+    <kp>1000000.0</kp><kd>100.0</kd>
+  </gazebo>
+
+  <link name="rr_wheel_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="package://competition_robot/meshes/mecanum/back_right_wheel.STL"/></geometry>
+      <material name="wheel_hub"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.5707963 0 0"/>
+      <geometry><cylinder radius="0.0485" length="0.0506"/></geometry>
+    </collision>
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.0515"/>
+        <inertia ixx="0.000041" ixy="0" ixz="0" iyy="0.000061" iyz="0" izz="0.000041"/>
+      </inertial>
+  </link>
+  <joint name="rr_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="rr_wheel_link"/>
+    <origin xyz="-0.0798 -0.1454 0.0485" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <dynamics damping="0.02" friction="0.0"/>
+  </joint>
+  <gazebo reference="rr_wheel_link">
+    <!-- 麦轮各向异性摩擦: 沿滚动方向(+x)高摩擦 -> 能驱动;
+         沿轮轴方向(+y)低摩擦 -> 允许横移。mu1=fdir1 方向, mu2=垂直方向。
+         不加这个的话, planar_move 发的 vy 会被轮子侧向刮地摩擦直接吃掉。 -->
+    <mu1>1</mu1>
+    <mu2>0.005</mu2>
+    <fdir1>1 0 0</fdir1>
+    <kp>1000000.0</kp><kd>100.0</kd>
+  </gazebo>
+
+  <!-- ================= 2D 激光雷达 (镭神 N10_P) ================= -->
+
+  <link name="laser_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="package://competition_robot/meshes/sensor/laser_link.STL"/></geometry>
+      <material name="sensor"/>
+    </visual>
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.2"/>
+        <inertia ixx="0.000167" ixy="0" ixz="0" iyy="0.000167" iyz="0" izz="0.00025"/>
+      </inertial>
+  </link>
+  <joint name="laser_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="laser_link"/>
+    <origin xyz="0.13374 0 0.2" rpy="0 0 0"/>
+  </joint>
+  <gazebo reference="laser_link">
+    <sensor type="ray" name="lidar2d">
+      <always_on>true</always_on>
+      <visualize>false</visualize>
+      <update_rate>10</update_rate>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>720</samples>
+            <resolution>1</resolution>
+            <min_angle>-3.141593</min_angle>
+            <max_angle>3.141593</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.1</min>
+          <max>6</max>
+          <resolution>0.01</resolution>
+        </range>
+        <noise><type>gaussian</type><mean>0.0</mean><stddev>0.01</stddev></noise>
+      </ray>
+      <plugin name="lidar2d_plugin" filename="libgazebo_ros_laser.so">
+        <topicName>scan</topicName>
+        <frameName>laser_link</frameName>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- ================= 相机 ================= -->
+
+  <link name="camera_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="package://competition_robot/meshes/sensor/camera_link.STL"/></geometry>
+      <material name="sensor"/>
+    </visual>
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.17"/>
+        <inertia ixx="0.000154" ixy="0" ixz="0" iyy="0.000025" iyz="0" izz="0.000154"/>
+      </inertial>
+  </link>
+  <joint name="camera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+    <origin xyz="0.14914 -0.000497 0.19998" rpy="0 0 0"/>
+  </joint>
+  <gazebo reference="camera_link">
+    <!-- 只发 RGB, 不做深度 -->
+    <sensor type="camera" name="camera">
+      <always_on>true</always_on>
+      <update_rate>15</update_rate>
+      <camera>
+        <horizontal_fov>1.012291</horizontal_fov>
+        <image><width>640</width><height>480</height><format>R8G8B8</format></image>
+        <clip><near>0.6</near><far>8</far></clip>
+      </camera>
+      <plugin name="camera_plugin" filename="libgazebo_ros_camera.so">
+        <cameraName>camera</cameraName>
+        <frameName>camera_link</frameName>
+        <imageTopicName>rgb/image_raw</imageTopicName>
+        <cameraInfoTopicName>rgb/camera_info</cameraInfoTopicName>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- ================= IMU ================= -->
+
+  <link name="imu_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="package://competition_robot/meshes/sensor/imu_link.STL"/></geometry>
+      <material name="sensor"/>
+    </visual>
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.02"/>
+        <inertia ixx="0.000003" ixy="0" ixz="0" iyy="0.000003" iyz="0" izz="0.000005"/>
+      </inertial>
+  </link>
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="0.14419 0.00215 0.1034" rpy="3.1416 0 0"/>
+  </joint>
+  <gazebo reference="imu_link">
+    <sensor name="imu_sensor" type="imu">
+      <always_on>true</always_on>
+      <update_rate>100</update_rate>
+      <visualize>false</visualize>
+      <plugin name="imu_plugin" filename="libgazebo_ros_imu_sensor.so">
+        <topicName>imu</topicName>
+        <bodyName>imu_link</bodyName>
+        <frameName>imu_link</frameName>
+        <updateRateHZ>100</updateRateHZ>
+        <gaussianNoise>0.0</gaussianNoise>
+        <xyzOffset>0 0 0</xyzOffset>
+        <rpyOffset>0 0 0</rpyOffset>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- ================= 驱动 ================= -->
+  <!-- 全向驱动: 自研 C++ 插件, 替代 gazebo_ros_planar_move。
+       planar_move 实测实际自转只有指令的 0.637 倍, 本插件解决这个问题。
+       velocityMode 可选 canonical / all_rigid / model (见插件源码注释)。 -->
+  <gazebo>
+    <plugin name="holonomic_drive" filename="libcompetition_holonomic_drive.so">
+      <commandTopic>cmd_vel</commandTopic>
+      <odometryTopic>odom_groundtruth</odometryTopic>
+      <odometryFrame>odom_groundtruth</odometryFrame>
+      <odometryRate>50</odometryRate>
+      <robotBaseFrame>base_footprint</robotBaseFrame>
+      <robotNamespace>/</robotNamespace>
+      <cmdTimeout>0.5</cmdTimeout>
+      <velocityMode>canonical</velocityMode>
+      <publishOdometry>true</publishOdometry>
+    </plugin>
+  </gazebo>
+
+  <!-- ================= 轮式编码器 ================= -->
+  <!-- 仿真里机器人由 planar_move 直接驱动, 轮子大多在打滑, Gazebo 的
+       关节角度不能当编码器用。所以编码器由节点模拟:
+         scripts/sim_wheel_encoders.py  用同一套麦轮逆运动学积分出四个
+         轮子转角, 发到 /joint_states (= 理想编码器)
+         scripts/mecanum_odometry.py    读 /joint_states 算 /odom
+       真机上第二个节点原样复用, 第一个节点换成真实编码器读取。 -->
+
+</robot>

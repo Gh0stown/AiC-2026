@@ -1,0 +1,18 @@
+# ---- catkin 编译产物 (clone 后自己 catkin_make) ----
+/build/
+/devel/
+/logs/
+*.pyc
+__pycache__/
+
+# ---- 临时验证目录 (我调试用的, 不入库) ----
+.verify/
+*.orig
+*.rej
+
+# ---- 编辑器/系统 ----
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store

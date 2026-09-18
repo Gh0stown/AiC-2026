@@ -1,0 +1,123 @@
+# TEB local planner (Timed Elastic Band) —— 平滑轨迹优化
+#
+#   roslaunch competition_robot navigation.launch planner:=teb
+#
+# ★ 实测结论 (2026-09-18, 4.2x4.2 场地 + 几何干净地图 + 局部地图无膨胀):
+#    直线 3 m:  横向偏差 3.7 cm, 0 横移, 0 原地转, 12.6 s   (DWA 是 2.4 cm / 13.0 s)
+#    贴墙斜线:  能到但慢: 40.9 s, 绕 0.44 m, 1 次恢复行为  (DWA 13.9 s / 0.11 m / 0 恢复)
+#    => 直线两边差不多; 靠墙目标 DWA 明显更好, 所以默认是 DWA。
+#    想试 TEB: roslaunch ... planner:=teb
+#
+# ★ 让它"不超时"的两个稳定化改动 (之前贴墙会 133 次摆头超时):
+#    1) footprint_model 用 **圆形** 而不是多边形 —— 多边形在狭小场地最容易让优化器震荡
+#    2) dt_ref 0.4 -> 0.25, 迭代 5/4 -> 8/6 (轨迹分辨率更细)
+#
+# ★★ 两个必须知道的开关:
+#    max_vel_y: 0        没有横移速度可用 -> 不会"斜着滑"(麦轮横移看着很怪)
+#                        想用横移就设 0.2 (同时 weight_kinematics_nh 给小值)
+#    weight_kinematics_nh 非完整约束权重: 给大(500)它为了满足约束会摆头, 给小(1)最好
+#
+#   sudo apt install ros-noetic-teb-local-planner
+#   roslaunch competition_robot navigation.launch planner:=teb
+#
+# ★ 为什么推荐它: TEB 不是"每一步采样几十条轨迹挑一条"(DWA/TrajectoryPlanner 那套),
+#   而是把整条轨迹当成一个优化问题(时间+避障+运动学+跟路径), 解出来就是
+#   连续曲率的光滑轨迹 —— 走直线不蛇形、转弯不会原地顿一下。
+#
+# ★ 想更"丝滑"主要调这几个:
+#   weight_optimaltime  调大 -> 更快
+#   weight_obstacle     调大 -> 离障碍更远, 但路径可能更弯
+#   weight_viapoint     调大 -> 更贴全局路径(更直)
+#   weight_kinematics_nh  非完整约束权重: 大 = 硬约束(会摆头); 小 = 软约束(配 max_vel_y=0 最好)
+#   dt_ref              轨迹时间分辨率, 小=更细腻但更慢
+TebLocalPlannerROS:
+
+  # ---- 轨迹 ----
+  teb_autosize: true
+  dt_ref: 0.25
+  dt_hysteresis: 0.1
+  max_samples: 600
+  global_plan_overwrite_orientation: true
+  allow_init_with_backwards_motion: false
+  max_global_plan_lookahead_dist: 3.0     # 看远一点, 轨迹才不会一段一段地拐
+  global_plan_viapoint_sep: 0.1
+  global_plan_prune_distance: 1.0
+  exact_arc_length: false
+  feasibility_check_no_poses: 3
+  publish_feedback: false
+
+  # ---- 机器人速度/加速度 ----
+  max_vel_x: 0.35
+  max_vel_x_backwards: 0.20
+  # ★★ 横移开关: 0 = 不横移(像普通车一样开, 走直线最直、看着最自然) ← 默认
+  #    想用麦轮横移就设 0.2, 同时要把下面的 weight_kinematics_nh 改成 0
+  max_vel_y: 0.0
+  max_vel_theta: 1.0
+  acc_lim_x: 1.0
+  acc_lim_y: 0.0
+  acc_lim_theta: 1.5
+  min_turning_radius: 0.0                 # 全向 -> 0
+  wheelbase: 0.207                        # 前后轴平均, 只有差速/阿克曼才用得到
+  cmd_angle_instead_rotvel: false
+  is_footprint_dynamic: false
+
+  # ★★ "像在开车" 的关键其实不是这个权重, 而是上面 max_vel_y: 0 (没有横移速度可用)。
+  #    实测: nh=0 时 TEB 用横移抄近路(直线偏 76 mm, 69% 时间在横移);
+  #          nh=500 时它为了满足约束来回摆头(直线弯 110 mm)。
+  #    现在 max_vel_y=0 + nh 给个小值(软约束) -> 既不横移也不摆头。
+  weight_kinematics_nh: 1.0
+  # 也尽量朝前开 (别倒着开)
+  weight_kinematics_forward_drive: 1.0
+  weight_kinematics_turning_radius: 1.0
+
+  # ---- 车体轮廓 (和 costmap 保持一致) ----
+  # ★ TEB 内部碰撞用**圆形**模型: 多边形模型在狭小场地里最容易让优化器震荡
+  #   (实测 polygon + 贴墙目标 -> 133 次摆头、超时)。真实碰撞仍由 costmap 保证。
+  footprint_model:
+    type: "circular"
+    radius: 0.22
+
+  # ---- 到点判定 ----
+  xy_goal_tolerance: 0.12
+  yaw_goal_tolerance: 0.15
+  free_goal_vel: false
+  trans_stopped_vel: 0.05
+  complete_global_plan: true
+
+  # ---- 障碍 ----
+  min_obstacle_dist: 0.08
+  inflation_dist: 0.20
+  include_costmap_obstacles: true
+  costmap_obstacles_behind_robot_dist: 0.5
+  obstacle_poses_affected: 15
+  legacy_obstacle_association: false
+  obstacle_association_force_inclusion_factor: 1.5
+  obstacle_association_cutoff_factor: 5.0
+  costmap_converter_plugin: ""            # 用原始代价地图, 不用插件
+  costmap_converter_spin_thread: true
+  costmap_converter_rate: 5
+
+  # ---- 优化权重 ----
+  no_inner_iterations: 8
+  no_outer_iterations: 6
+  optimization_activate: true
+  optimization_verbose: false
+  penalty_epsilon: 0.1
+  weight_max_vel_x: 2.0
+  weight_max_vel_y: 1.0
+  weight_max_vel_theta: 1.0
+  weight_acc_lim_x: 1.0
+  weight_acc_lim_y: 1.0
+  weight_acc_lim_theta: 1.0
+  weight_optimaltime: 0.5
+  weight_shortest_path: 0.0
+  weight_obstacle: 10.0
+  weight_inflation: 0.1
+  weight_dynamic_obstacle: 10.0
+  # ★ 更贴全局路径(更直): 调大
+  weight_viapoint: 50.0
+  weight_adapt_factor: 2.0
+
+  # ---- 多拓扑 (能自动选"从左绕还是从右绕"); 场地小, 关掉省 CPU ----
+  enable_homotopy_class_planning: false
+  enable_multithreading: true

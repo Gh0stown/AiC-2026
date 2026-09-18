@@ -1,0 +1,38 @@
+# AMCL 定位 (粒子滤波), 用静态地图 + /scan + /odom
+use_map_topic: true
+odom_frame_id: odom
+base_frame_id: base_footprint
+global_frame_id: map
+scan_topic: scan
+
+# ★ 麦轮=全向。可选项: diff / omni / diff-corrected / omni-corrected
+robot_model_type: "omni"
+# 仿真里里程计很准 (和真值差几毫米), 噪声给保守值
+alpha1: 0.2      # 旋转噪声(来自旋转)
+alpha2: 0.2      # 旋转噪声(来自平移)
+alpha3: 0.2      # 平移噪声(来自平移)
+alpha4: 0.2      # 平移噪声(来自旋转)
+alpha5: 0.2      # 全向专用: 横移噪声
+
+laser_min_range: 0.1
+laser_max_range: 6.0
+laser_max_beams: 90
+laser_likelihood_max_dist: 2.0
+
+min_particles: 500
+max_particles: 2000
+kld_err: 0.02
+kld_z: 0.99
+update_min_d: 0.10
+update_min_a: 0.10
+resample_interval: 1
+transform_tolerance: 0.3
+recovery_alpha_slow: 0.001
+recovery_alpha_fast: 0.1
+pf_err: 0.05
+pf_z: 0.99
+
+set_initial_pose: true    # initial_pose_x/y/a 由 launch 传 (默认=出生点)
+initial_pose_x: 1.772
+initial_pose_y: 1.782
+initial_pose_a: 3.1416

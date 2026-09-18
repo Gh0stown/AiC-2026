@@ -1,0 +1,19 @@
+// Auto-generated: 比赛场地地面贴图
+material Arena/Floor
+{
+  technique
+  {
+    pass
+    {
+      ambient 1 1 1 1
+      diffuse 1 1 1 1
+      specular 0 0 0 0 0
+      texture_unit
+      {
+        texture arena_floor.png
+        filtering anisotropic
+        max_anisotropy 8
+      }
+    }
+  }
+}

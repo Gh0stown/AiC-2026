@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<!--
+  Karto (OpenKarto / slam_karto) 建图 —— 图优化 SLAM, 回环比 gmapping 好
+
+    roslaunch competition_robot slam_karto.launch
+
+  需要: sudo apt install ros-noetic-slam-karto ros-noetic-open-karto
+  (你的 ~/bit_ws 里也已经编译过一个 slam_karto, source 那个工作区也能用)
+-->
+<launch>
+  <arg name="sim"  default="true"/>
+  <arg name="rviz" default="true"/>
+  <arg name="gui"  default="true"/>
+  <arg name="x"    default="1.772"/>
+  <arg name="y"    default="1.782"/>
+  <arg name="yaw"  default="3.1416"/>
+
+  <include if="$(arg sim)" file="$(find competition_robot)/launch/robot_gazebo.launch">
+    <arg name="rviz" value="false"/>
+    <arg name="gui"  value="$(arg gui)"/>
+    <arg name="x"   value="$(arg x)"/>
+    <arg name="y"   value="$(arg y)"/>
+    <arg name="yaw" value="$(arg yaw)"/>
+  </include>
+
+  <node pkg="slam_karto" type="slam_karto" name="slam_karto" output="screen">
+    <param name="odom_frame"  value="odom"/>
+    <param name="map_frame"   value="map"/>
+    <param name="base_frame"  value="base_footprint"/>
+    <param name="scan_topic"  value="scan"/>
+    <param name="resolution"  value="0.05"/>
+    <param name="map_update_interval" value="2.0"/>
+    <param name="minimum_time_interval" value="0.2"/>
+    <param name="transform_timeout" value="0.2"/>
+    <param name="minimum_travel_distance" value="0.10"/>
+    <param name="minimum_travel_heading"  value="0.10"/>
+    <param name="range_threshold" value="30.0"/>
+    <param name="use_scan_matching" value="true"/>
+    <param name="use_scan_barycenter" value="true"/>
+    <param name="do_loop_closing" value="true"/>
+    <param name="loop_search_maximum_distance" value="3.0"/>
+    <param name="loop_match_minimum_chain_size" value="10"/>
+  </node>
+
+  <node if="$(arg rviz)" pkg="rviz" type="rviz" name="rviz"
+        args="-d $(find competition_robot)/rviz/mapping.rviz" required="false"/>
+</launch>

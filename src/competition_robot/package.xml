@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>competition_robot</name>
+  <version>1.0.0</version>
+  <description>
+    比赛机器人 (四轮麦克纳姆)。参数集中在 config/robot_params.yaml,
+    由 scripts/gen_robot.py 生成 URDF, 真机驱动读同一份参数,
+    保证仿真与实车的几何 / 运动学 / topic / frame 一致 (sim2ros)。
+  </description>
+
+  <maintainer email="todo@example.com">competition team</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>roscpp</build_depend>
+  <build_depend>nav_msgs</build_depend>
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>tf</build_depend>
+  <build_depend>gazebo_ros</build_depend>
+  <build_depend>gazebo_plugins</build_depend>
+  <build_depend>gazebo_dev</build_depend>
+
+  <exec_depend>roscpp</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>tf</exec_depend>
+  <exec_depend>gazebo_ros</exec_depend>
+  <exec_depend>gazebo_plugins</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>joint_state_publisher</exec_depend>
+  <exec_depend>rviz</exec_depend>
+  <exec_depend>competition_arena</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+
+  <export/>
+</package>

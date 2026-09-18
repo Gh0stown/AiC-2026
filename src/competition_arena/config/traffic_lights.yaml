@@ -1,0 +1,16 @@
+# 临时红绿灯配置（唯一真值源: 安装工具和切换节点都读它）
+#
+# 位置按比赛方场地示意图 (智慧社区赛项介绍 P7) 对照我们的地图取的:
+#   上灯: 顶部减速带左侧, 朝 +x  (迎着从起点沿上边往左开的车)
+#   下灯: 底部减速带右侧, 朝 -x  (迎着沿下边往右开的车)
+#
+# 高度 z 按相机几何: 相机高 0.20 m、竖直半视场 ±22.6°、近裁剪 0.6 m,
+# 灯心 0.55 m => 距离 ≥0.84 m 能识别、<0.6 m 完全看不到 => 停车线放 1.2~1.5 m。
+lights:
+  - {name: tl_top, model: traffic_light_v, layout: vertical,   x: -0.65, y:  1.88, z: 0.55, yaw: 0.0}
+  - {name: tl_bot, model: traffic_light_h, layout: horizontal, x: -0.55, y: -1.88, z: 0.55, yaw: 3.1416}
+
+sequence:
+  - {color: green,  duration: 6.0}
+  - {color: yellow, duration: 2.0}
+  - {color: red,    duration: 6.0}

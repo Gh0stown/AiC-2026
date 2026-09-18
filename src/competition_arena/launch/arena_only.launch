@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!--
+  只启动场地 (不含机器人), 用于单独查看地图。
+
+    roslaunch competition_arena arena_only.launch
+-->
+<launch>
+  <env name="GAZEBO_RESOURCE_PATH"
+       value="$(find competition_arena):/usr/share/gazebo-11:$(optenv GAZEBO_RESOURCE_PATH)"/>
+
+  <arg name="gui"    default="true"/>
+  <arg name="paused" default="false"/>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name"   value="$(find competition_arena)/worlds/competition_arena.world"/>
+    <arg name="paused"       value="$(arg paused)"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="gui"          value="$(arg gui)"/>
+    <arg name="headless"     value="false"/>
+    <arg name="debug"        value="false"/>
+  </include>
+</launch>

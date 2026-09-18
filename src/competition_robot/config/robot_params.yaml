@@ -1,0 +1,206 @@
+# =============================================================================
+#  比赛机器人参数表 —— 唯一真值源 (single source of truth)
+#
+#  这份文件被两边同时读取, 保证仿真和真机完全一致:
+#    1) 仿真侧:  python3 scripts/gen_robot.py   → 生成 urdf/competition_robot.urdf
+#    2) 真机侧:  驱动节点读同一份 → 同样的运动学 / 同样的 topic / 同样的 frame
+#
+#  数据来源标注:
+#    [实车]  = 从 ~/bit_ws/src/robot_description/mowen2 的真实 URDF 里读出来的
+#    [实测]  = 从 ~/bit_ws/src/car_bringup 的驱动/launch 里读出来的
+#    [选定]  = 我按实车模型比对后选的
+#    [待测]  = 还需要你上秤/量一下 / 确认
+#
+#  单位: 长度 m, 质量 kg, 角度 deg, 速度 m/s 或 rad/s, 转速 rpm
+# =============================================================================
+
+robot:
+  name: competition_robot
+
+  # ★ frame 名字和实车保持一致 (实车用 base_footprint 做导航基准)
+  frames:
+    base_footprint: base_footprint
+    base_link:      base_link
+    odom:           odom
+    laser:          laser_link
+    laser3d:        lidar3d_link          # 仿真里的 3D 雷达 (实车没有这颗)
+    camera:         camera_link
+    imu:            imu_link
+
+# -----------------------------------------------------------------------------
+#  底盘几何
+#
+#  坐标约定和实车 URDF 一致: base_footprint 和 base_link 重合, 都在**地面**原点。
+#  所以下面所有偏移都是"离地多高", 可以直接和实车 URDF 对照。
+# -----------------------------------------------------------------------------
+chassis:
+  length: 0.3334           # [实车] mowen2/meshes/mecanum/base_link.STL 包围盒 x
+  width:  0.2187           # [实车] 同上 y (不含两侧凸出的轮子)
+  height: 0.1397           # [实车] 同上 z
+  # ★ 没有秤, 按部件估的。这是"除轮子和传感器之外的全部" (整车总质量约 3.15 kg):
+  #     车体结构 (CAD 导出)        0.486 kg
+  #     4x 电机+减速箱  0.12 x 4   0.480
+  #     电池                       0.300
+  #     工控机 (树莓派/Jetson)     0.200
+  #     电机驱动板                 0.120
+  #     支架/螺丝/线材             0.264
+  #     ----------------------------------
+  #     小计                       1.850
+  #   轮子 (4 x 0.0515) = 0.206, 3D雷达 0.90, 相机 0.17, IMU 0.02
+  #   整车总计 ≈ 3.15 kg  ← 和你估的 3 kg 接近
+  mass:   1.85             # [估计] 有秤了称一下整车再反推这个值
+  # 车体几何中心相对 base_link(地面原点) 的偏移 [x, y, z]
+  center_offset: [0.0265, 0.0, 0.0974]   # [实车] 由 STL 包围盒算出
+
+# -----------------------------------------------------------------------------
+#  麦轮运动学 (四轮麦克纳姆, X 型布局)
+#
+#  ★ 实车前后轮 x 不相等 —— 轮子整体前移了约 2.4 cm。
+#    自转系数前后不同 (前 0.2726 / 后 0.2252, 差 17%)。
+#    按对称轴距算的话自转会偏 10% 左右。mecanum.py 已支持这种布局。
+# -----------------------------------------------------------------------------
+mecanum:
+  wheel_radius: 0.0485     # [实车] 轮心离地高度 = 轮半径 (轮径 0.097 m)
+  wheel_width:  0.0506     # [实车] 轮子厚度
+  front_axle_x:  0.1272    # [实车] 前轮中心 x
+  rear_axle_x:  -0.0798    # [实车] 后轮中心 x  ← 负值, 且 |后| < |前|
+  track:        0.2908     # [实车] 左右轮中心距 (y) = 0.1454 x 2
+  roller_angle: 45.0       # 标准麦轮辊子倾角
+  roller_count: 9          # 只影响外观
+  wheel_mass: 0.0515       # [实车] 单个轮子质量 (含辊子)
+
+  # 速度上限 —— 实车驱动里没有限幅, 这几项先占位
+  max_linear_vel:  1.00    # [待测]
+  max_lateral_vel: 0.80    # [待测]
+  max_angular_vel: 2.00    # [待测]
+  max_wheel_rpm:   200.0   # [待测]
+
+# -----------------------------------------------------------------------------
+#  轮式编码器
+#
+#  ★ 实车 car_bringup/base.cpp 是把 /vel_raw 积分成里程计, 属于**开环, 没读编码器**。
+#    仿真里编码器由 scripts/sim_wheel_encoders.py 模拟 (见 README 4.2)。
+# -----------------------------------------------------------------------------
+encoder:
+  counts_per_rev: 1024     # [待确认] 编码器每圈脉冲数
+  gear_ratio:     30.0     # [待确认] 减速比
+  quadrature:     4        # [待确认] 倍频
+  actual_odom_source: "open_loop"   # [实测] open_loop | encoder
+
+# -----------------------------------------------------------------------------
+#  传感器   mount 是相对 base_link(地面原点) 的位姿, 和实车 URDF 一致
+# -----------------------------------------------------------------------------
+sensors:
+
+  # ---- 3D 激光雷达 (仿真里默认关掉, 见下面的原因) ----
+  #  ★ 2026-09-17 实测结论: 用 gazebo 的 block_laser 插件驱动 16 线扫描时,
+  #    **贴墙/在角落**这种位姿下会给出几何上不可能的回波 (车头 0.06 m 贴墙,
+  #    却报 3.8~11.5 m 的点, 还会"穿墙"), 原因是这个插件本来是给 2D 单线写的。
+  #    这些假点被 gmapping 当成墙, 会在地图外面糊出一大片扇形 (实测复现)。
+  #    → 建图/定位改用 lidar2d (实车也是 2D 雷达), /scan 是真正的 LaserScan。
+  #    要看 /points 把 enabled 改回 true 即可 (不影响 /scan)。
+  #    以后真需要 3D 点云, 建议换 velodyne 的 gazebo 插件 (PointCloud2)。
+  lidar3d:
+    enabled: false
+    model: "16线激光雷达"                  # [待测] 具体型号 (RS-LiDAR-16 / VLP-16 / Helios)
+    # ★ 注意: 实车 mowen2 的 laser_joint 是 (0.13374, 0, 0.13599), 但那个高度
+    #   落在车体网格内部 (车体 z 范围 0.0275~0.1672), 实车是装在壳体凹槽里的。
+    #   仿真里车体是实心盒子, 装在那个高度雷达会一直打自己的壳 (实测所有 bin
+    #   都有回波且最小距离=range_min)。所以这里抬到车顶之上。
+    mount:     [0.13374, 0.00, 0.20000]
+    mount_rpy: [0.0, 0.0, 0.0]
+    rings: 16                             # 线数
+    # 每线一圈采样点数。实机通常 1800+, 但 Gazebo 是 CPU 逐条打射线,
+    # 16 x 1800 = 28800 条会非常慢, 仿真里先降到 360。
+    # 360 = 1 度一个点。嫌卡可以降到 180 (2 度一个点), 射线数直接减半
+    horizontal_samples: 360
+    vertical_fov_deg: [-15.0, 15.0]       # [待测] 按型号手册
+    range: [0.20, 100.0]                  # [待测]
+    mass: 0.90                            # [估计] 16线雷达整机含支架
+    update_rate: 10.0                     # 嫌卡可以降到 5
+    topic: points                         # -> /points (sensor_msgs/PointCloud)
+
+  # ---- 2D 单线激光雷达: ★建图/定位用这颗 (实车就是它) ----
+  lidar2d:
+    enabled: true
+    model: "镭神 N10_P"                    # [实测] lslidar_serial.launch: lidar_name=N10_P
+    # [实车] mowen2 laser_joint 是 (0.13374, 0, 0.13599); 那个高度在仿真里
+    # 落在车体碰撞盒内部 (仿真车体是实心盒子), 所以抬到 0.20:
+    # 刚好在车顶 (0.167) 之上, 水平扫描面不会打到自己。
+    mount:     [0.13374, 0.00, 0.20000]
+    mount_rpy: [0.0, 0.0, 0.0]
+    samples: 720
+    range: [0.10, 6.0]                    # [实测] min_range 0.1 / max_range 6
+    update_rate: 10.0
+    # [实测] 实车 launch 屏蔽了 90~270 度 (装车后背面被挡住)。
+    # 仿真里先给整圈, 这样建图能看见四周的墙; 想复现实车的 180 度视野改成 false。
+    use_full_circle: true
+    mass: 0.20                            # [估计] 单线雷达
+    topic: scan                           # -> /scan (sensor_msgs/LaserScan)
+
+  # ---- 从 3D 点云切一层生成 2D /scan (备用; 默认关, 用 2D 雷达那颗) ----
+  #  要用: robot_gazebo.launch 里 scan_from_cloud:=true (同时把 lidar3d 打开)
+  pointcloud_to_scan:
+    enabled: false
+    input: points
+    output: scan
+    height_min: -0.15                     # 取雷达上下这个高度带内的点
+    height_max: 0.15
+    angle_min_deg: -180.0
+    angle_max_deg: 180.0
+    # ★ 要和雷达每圈点数对上: 一圈 360 点 -> 1.0 度一个 bin。
+    #   如果这里比点云分辨率细, 会出现"隔一个 bin 空一个"的假盲区。
+    angle_step_deg: 1.0
+    range: [0.20, 30.0]
+
+  # ---- 深度相机 ----
+  camera:
+    enabled: true
+    # 只发 RGB。深度图/点云默认关掉:
+    #   一是用不上, 二是 Gazebo 出的深度图是 32FC1, RViz 的 Image 显示看不了,
+    #   看起来就像"没有返回内容"。
+    publish_depth: false
+    model: "Orbbec Astra Pro (仅 RGB)"     # [选定] camera_link mesh 宽 168mm ≈ Astra Pro 165mm
+    mount:     [0.14914, -0.00049737, 0.19998]   # [实车] mowen2 camera_joint
+    mount_rpy: [0.0, 0.0, 0.0]
+    width: 640                            # 嫌卡可以降到 320 (配合 height 240)
+    height: 480
+    horizontal_fov_deg: 58.0              # Astra Pro 深度视场角 58°H x 45.5°V
+    range: [0.60, 8.0]                    # Astra Pro 深度范围 0.6~8 m
+    mass: 0.17                            # [实车规格] Astra Pro 官方 165 g
+    update_rate: 15.0                     # 实机 30fps, 仿真降到 15 省算力
+    topic: camera
+
+  # ---- IMU ----
+  imu:
+    enabled: true
+    model: "WIT IMU"                       # [实测] wit_ros_imu
+    mount:     [0.14419, 0.00215, 0.1034]  # [实车] mowen2 base_imu
+    mount_rpy: [3.1416, 0.0, 0.0]          # [实车] 实车 IMU 是倒装的
+    mass: 0.02                            # [估计] IMU 模块
+    update_rate: 100.0
+    topic: imu
+
+# -----------------------------------------------------------------------------
+#  仿真专用 (真机用不到)
+# -----------------------------------------------------------------------------
+simulation:
+  # 驱动插件: holonomic = 自研 C++ 插件 (推荐); planar_move = gazebo 自带
+  # 视觉用实车导出的 STL (推荐, 和真车一模一样) 还是简化几何体
+  # STL 在 meshes/ 目录下, 是从 ~/bit_ws/src/robot_description/mowen2/meshes 拷来的
+  visual_style: mesh
+  drive_plugin: holonomic
+  # 只对 holonomic 有效: canonical / all_rigid / model
+  #   canonical 实测自转保真度 0.997, model(=planar_move 的做法) 只有 0.72
+  velocity_mode: canonical
+  cmd_timeout: 0.5
+  odom_rate: 50.0
+
+  # 车轮摩擦。planar_move 那套会把车轮角速度锁死, 所以用自研插件;
+  # mu1 沿滚动方向, mu2 沿轮轴方向 (决定能不能横移, 不要调大)
+  wheel_friction:
+    rolling: 1.00
+    lateral: 0.005
+
+  light_wheels: false
+  wheel_mass_sim: 0.01

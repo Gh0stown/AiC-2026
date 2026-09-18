@@ -1,0 +1,51 @@
+# DWA local planner (Dynamic Window Approach)
+#
+#   sudo apt install ros-noetic-dwa-local-planner
+#   roslaunch competition_robot navigation.launch planner:=dwa
+#
+# 比老的 TrajectoryPlanner 好: 采样 (vx, vth) 的"动态窗口", 打分含
+# "贴全局路径 / 朝目标 / 离障碍远", 走直线比 TrajectoryPlanner 稳。
+# 这里**按差速车配置**(max_vel_y=0): 麦轮不横移, 车头始终顺着路径,
+# 看起来就是"走得直 + 转弯平滑"。想用横移就把 max_vel_y / vy_samples 打开。
+DWAPlannerROS:
+  max_vel_x: 0.40
+  min_vel_x: -0.10
+  max_vel_y: 0.0
+  min_vel_y: 0.0
+  max_vel_trans: 0.40
+  min_vel_trans: 0.03
+  max_vel_theta: 1.2
+  min_vel_theta: 0.20
+
+  acc_lim_x: 1.0
+  acc_lim_y: 0.0
+  acc_lim_theta: 1.5
+  acc_lim_trans: 1.0
+
+  vx_samples: 20
+  vy_samples: 1
+  vth_samples: 40
+  controller_frequency: 10.0
+
+  sim_time: 2.0
+  sim_granularity: 0.05
+  angular_sim_granularity: 0.05
+  # ★ 实测 (干净地图, 3 m 直线): 32/24 时横向偏差 1.6 cm 最好;
+  #   改成 50/20 -> 4.7 cm; 80/10 -> 5.4 cm 且变慢。这两个权重别乱动。
+  path_distance_bias: 32.0
+  goal_distance_bias: 24.0
+  occdist_scale: 0.02
+  forward_point_distance: 0.325
+  stop_time_buffer: 0.2
+  scaling_speed: 0.25
+  max_scaling_factor: 0.2
+  prune_plan: true
+  publish_traj_pc: false
+  publish_cost_grid_pc: false
+  global_frame_id: odom
+
+  xy_goal_tolerance: 0.07   # 停车精度 (配合"先原地转向再直走"可以收紧到 7cm)
+  yaw_goal_tolerance: 0.30
+  latch_xy_goal_tolerance: false   # ★ 别latch: 否则到点前会停下来原地转(你现在遇到的问题)
+  trans_stopped_vel: 0.03
+  theta_stopped_vel: 0.05
