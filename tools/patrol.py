@@ -37,7 +37,7 @@ from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from nav_msgs.msg import Odometry
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from map_pixels import px2x, px2y, GOAL_LIMIT      # noqa: E402
+from map_pixels import px2x, px2y, INNER        # noqa: E402
 
 WS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_FILE = os.path.join(WS, 'src', 'competition_robot', 'config', 'waypoints.yaml')
@@ -167,9 +167,29 @@ def load(path):
                         yaw=w.get('yaw')))
     start = cfg.get('start')
     start_yaw = cfg.get('start_yaw')
+    # 回程目标可以和出生点不同: 出生点若在角落, 原地转向的几何余量太小,
+    # move_base 会因为定位抖动把它判成碰撞而卡住。见 waypoints.yaml 的 return_to。
+    ret = cfg.get('return_to') or start
     return (wps,
             ([float(start[0]), float(start[1])] if start else None),
-            (float(start_yaw) if start_yaw is not None else None))
+            (float(start_yaw) if start_yaw is not None else None),
+            ([float(ret[0]), float(ret[1])] if ret else None))
+
+
+# 底盘外接半径 + footprint_padding, 由 costmap_common_params.yaml 的 footprint 算得。
+# 原地转向时车心到墙至少要留这么多, 否则会被判成碰撞。
+FOOTPRINT_R = 0.2582
+SAFE_MARGIN = 0.10          # 希望额外留下的余量 (AMCL 定位误差实测中位 5.1 cm)
+
+
+def clearance_note(x, y):
+    """这个点原地转向还剩多少几何余量 (只考虑场地外墙)。"""
+    margin = (INNER - max(abs(x), abs(y))) - FOOTPRINT_R
+    if margin < 0:
+        return '  ✗ 转不开 (余量 %+.3f m)' % margin
+    if margin < SAFE_MARGIN:
+        return '  ⚠ 旋转余量仅 %.3f m (定位误差就可能吃掉)' % margin
+    return '  ✓ 旋转余量 %.3f m' % margin
 
 
 def main():
@@ -186,11 +206,14 @@ def main():
     ap.set_defaults(pre_rotate=True)
     a = ap.parse_args()
 
-    wps, start, start_yaw = load(a.file)
+    wps, start, start_yaw, return_to = load(a.file)
     print('航点 %d 个 (来自 %s)' % (len(wps), a.file))
     for w in wps:
-        flag = '' if max(abs(w['x']), abs(w['y'])) <= GOAL_LIMIT else '  ⚠ 太靠墙'
-        print('   %-8s (%+.3f, %+.3f)%s' % (w['name'], w['x'], w['y'], flag))
+        print('   %-8s (%+.3f, %+.3f)%s'
+              % (w['name'], w['x'], w['y'], clearance_note(w['x'], w['y'])))
+    if return_to:
+        print('   %-8s (%+.3f, %+.3f)%s   ← 最后回到这里摆正朝向'
+              % ('return', return_to[0], return_to[1], clearance_note(*return_to)))
     if a.dry_run:
         return
 
@@ -218,8 +241,8 @@ def main():
             for w in wps:
                 if p.go_to(w['name'], w['x'], w['y'], w['yaw']):
                     ok_n += 1
-            if start and not a.no_return_start:
-                p.go_to('start', start[0], start[1], yaw_home)
+            if return_to and not a.no_return_start:
+                p.go_to('return', return_to[0], return_to[1], yaw_home)
             rospy.loginfo('一圈跑完: %d/%d 个航点成功' % (ok_n, len(wps)))
             if not a.loop:
                 break
