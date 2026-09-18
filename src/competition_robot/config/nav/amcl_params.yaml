@@ -1,4 +1,31 @@
 # AMCL 定位 (粒子滤波), 用静态地图 + /scan + /odom
+#
+# ★ 本文件已**对齐实车配置** (sim2ros)
+#   实车来源: ~/bit_ws/src/nav_demo/launch/nav04_amcl.launch (2025-12-17 修改)
+#   保持仿真特有的: base_frame_id=base_footprint (与生成的 URDF 一致)
+#
+# 对齐依据 (2026-09-18 实测, 标准 7 航点巡航 + tools/check_localization.py,
+# 每套配置跑 2 轮):
+#
+#   配置                        更新率   位置中位  均值     P90      朝向P90  巡航耗时
+#   A 原仿真 (90束/500-2000)    2.37Hz  6.45cm  6.18cm   9.25cm   2.05°   95.5s
+#   B 对齐实车(180束/1500-5000) 1.12Hz  5.29cm  4.83cm   7.64cm   1.22°  120.5s
+#   C 折中 (只换观测模型)        2.30Hz  5.99cm  6.11cm  10.08cm   1.56°  101.9s
+#
+# 结论:
+#   1) B 在**每一项精度指标**上都稳定更好 (中位 -18%, 均值 -22%, 朝向P90 -41%)
+#   2) 代价是定位更新率减半 (2.37 -> 1.12 Hz) 且巡航慢约 26%
+#   3) C 说明精度收益来自"粒子数 + 更新频率"(费 CPU 的那部分), 不是激光观测模型;
+#      只换观测模型几乎没用 => 不存在"免费的精度"
+#   4) 选 B 的理由: 精度更好 + 与实车完全一致 (sim2ros) + 120s 仍远低于比赛 5 分钟限时。
+#      注意沙箱是软件渲染 + CPU 共享, 实机/显卡机上这个耗时代价应该小得多
+#
+# ★ 遗留问题 (调参解决不了): 本场地**只有四周墙**, 激光看到的永远是那 4 面墙,
+#   方房间里"沿墙方向滑移"不可观测 -> 定位误差有下限。即使 B 的 5.3cm 也**大于**
+#   回程点的 3.6cm 旋转余量。要彻底解决得靠:
+#     * 场景里加立体障碍 (人偶/车牌/楼宇) -> 激光特征变多, AMCL 会自然变好
+#     * 或改用激光里程计 (工作区里已有 rf2o_laser_odometry)
+#   测量工具: python3 tools/check_localization.py --duration 120 --csv /tmp/loc.csv
 use_map_topic: true
 odom_frame_id: odom
 base_frame_id: base_footprint
@@ -7,7 +34,7 @@ scan_topic: scan
 
 # ★ 麦轮=全向。可选项: diff / omni / diff-corrected / omni-corrected
 robot_model_type: "omni"
-# 仿真里里程计很准 (和真值差几毫米), 噪声给保守值
+# 实车写的是老参数名 odom_model_type, 是同一个东西
 alpha1: 0.2      # 旋转噪声(来自旋转)
 alpha2: 0.2      # 旋转噪声(来自平移)
 alpha3: 0.2      # 平移噪声(来自平移)
@@ -16,19 +43,26 @@ alpha5: 0.2      # 全向专用: 横移噪声
 
 laser_min_range: 0.1
 laser_max_range: 6.0
-laser_max_beams: 90
+laser_max_beams: 180              # 实车 180 (原仿真 90)
+laser_model_type: likelihood_field
 laser_likelihood_max_dist: 2.0
+laser_z_hit: 0.75                 # 以下 6 项实车明确给了, 原仿真走默认值
+laser_z_short: 0.05
+laser_z_max: 0.05
+laser_z_rand: 0.1
+laser_sigma_hit: 0.2
+laser_lambda_short: 0.1
 
-min_particles: 500
-max_particles: 2000
-kld_err: 0.02
+min_particles: 1500               # 实车 1500 (原仿真 500)
+max_particles: 5000               # 实车 5000 (原仿真 2000)
+kld_err: 0.05                     # 实车 0.05 (原仿真 0.02)
 kld_z: 0.99
-update_min_d: 0.10
-update_min_a: 0.10
-resample_interval: 1
-transform_tolerance: 0.3
-recovery_alpha_slow: 0.001
-recovery_alpha_fast: 0.1
+update_min_d: 0.05                # 实车 0.05 (原仿真 0.10) —— 修正更频繁
+update_min_a: 0.1
+resample_interval: 3              # 实车 3 (原仿真 1)
+transform_tolerance: 1.0          # 实车 1.0 (原仿真 0.3)
+recovery_alpha_slow: 0.0          # 实车关掉了自适应恢复 (丢了不会自己找回来)
+recovery_alpha_fast: 0.0
 pf_err: 0.05
 pf_z: 0.99
 
