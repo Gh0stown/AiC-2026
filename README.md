@@ -359,3 +359,47 @@ cd src/competition_robot && python3 scripts/gen_robot.py
 
 详细说明和**已知设计取舍**见 [`src/competition_robot/README.md`](src/competition_robot/README.md)；
 拿实车量尺寸看 [`docs/参数测量清单.md`](src/competition_robot/docs/参数测量清单.md)。
+
+---
+
+## 10. 视觉环境（复赛「视觉识别与检测」15 分）
+
+仿真和导航跑在系统 Python 上；**深度学习 / 视觉栈单独放在仓库根的 `.venv/`**
+（已 gitignore）。之所以不用系统 Python：本机没有 pip、没有可用 sudo、`$HOME` 只读。
+
+### 一条命令重建
+
+```bash
+tools/setup_vision_env.sh              # 本机（无显卡，装 CPU 版 torch）
+tools/setup_vision_env.sh --cuda 121   # 显卡机（CUDA 版本按实际填）
+tools/setup_vision_env.sh --recreate   # 清空重来
+```
+
+实测版本：torch `2.4.1+cpu` / torchvision `0.19.1` / ultralytics `8.4.155` /
+opencv-python `4.10.0` / numpy `1.24.4` / hyperlpr3 `0.1.3` / onnxruntime `1.19.2`
+
+> 详细说明、踩过的坑、搬显卡机的注意事项见 [`docs/vision_env.md`](docs/vision_env.md)。
+> 复赛要求拆解与差距分析见 [`复赛要求与差距分析.md`](复赛要求与差距分析.md)。
+
+### 车牌字符识别（已验证可用）
+
+```bash
+.venv/bin/python tools/plate_ocr.py --selftest     # 生成合成蓝牌并自检, 期望 3/3
+.venv/bin/python tools/plate_ocr.py 车牌裁剪图.png  # 识别单张
+```
+
+实测结论：HyperLPR3 自带的检测器**需要场景上下文**（纯车牌特写会漏检），
+但**识别网络对紧裁剪的车牌完美工作**（自检 3/3，置信度 0.993–0.997）。
+所以 `tools/plate_ocr.py` 只加载识别网络，正好配合
+「YOLO 框车牌 → 裁剪 → OCR」的流程。
+
+### 换到显卡机
+
+```bash
+git clone git@github.com:Gh0stown/AiC-2026.git && cd AiC-2026
+tools/setup_vision_env.sh --cuda 121
+```
+
+`.venv/`、`.cache/`、`datasets/`、`runs/`、`*.pt`、`*.onnx` **都不入库**（体积大），
+脚本会自动重建或重新下载，**不需要手工拷贝**。
+若显卡机是 Python 3.10+，可以放开 torch 版本上限：`TORCH_VER=2.5.1 tools/setup_vision_env.sh --cuda 121`
