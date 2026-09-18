@@ -5,6 +5,25 @@
 *.pyc
 __pycache__/
 
+# ---- Python 虚拟环境 (视觉/深度学习依赖, 体积大, clone 后自己建) ----
+# 重建步骤见 docs/vision_env.md
+/.venv/
+__pycache__/
+*.egg-info/
+
+# ---- 运行期缓存 (HyperLPR3 模型 / ultralytics 配置, 体积大) ----
+/.cache/
+
+# ---- 数据集与训练产物 (体积大, 不入库) ----
+/datasets/
+/runs/
+*.pt
+*.onnx
+*.pth
+# 但允许提交推理用的权重
+!/weights/**
+!**/weights/**
+
 # ---- 临时验证目录 (我调试用的, 不入库) ----
 .verify/
 *.orig
