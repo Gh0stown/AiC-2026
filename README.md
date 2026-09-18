@@ -287,6 +287,26 @@ python3 tools/patrol.py                    # 先 cmd_vel 原地转向, 再 DWA �
 roslaunch competition_robot navigation.launch          # 仿真 + 地图 + AMCL + move_base + RViz
 ```
 
+> **新开终端报 `RLException: ... is neither a launch file in package`？**
+> 那是因为 `devel/setup.bash` 没 source（`~/.bashrc` 里通常只有 `/opt/ros/noetic/setup.bash`，
+> 不含本工作区）。两个办法：
+>
+> ```bash
+> # 办法一: 每次手动 source
+> cd ~/桌面/人工智能算法大赛 && source devel/setup.bash
+>
+> # 办法二(推荐): 用包装脚本, 自动 source + 自动检查残留进程 + 自动避开 .venv
+> tools/nav.sh
+> tools/nav.sh planner:=teb
+> tools/nav.sh sim:=false          # 仿真已经在跑
+> tools/nav.sh --build              # 先 catkin_make 再启动
+> ```
+>
+> 想一劳永逸，把下面这行加到 `~/.bashrc` 末尾（注意判断存在，否则新克隆的仓库会报错）：
+> ```bash
+> [ -f ~/桌面/人工智能算法大赛/devel/setup.bash ] && source ~/桌面/人工智能算法大赛/devel/setup.bash
+> ```
+
 RViz 里 `2D Pose Estimate` 定一下车的位置 → `2D Nav Goal` 点目标点，车自己开过去。
 不开 RViz 也行：
 
