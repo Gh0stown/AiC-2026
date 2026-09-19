@@ -13,6 +13,15 @@
     python3 tools/patrol.py --loop                   # 一直循环
     python3 tools/patrol.py --save-trace /tmp/t.csv  # 记录轨迹(画图用)
     python3 tools/patrol.py --goal-includes-yaw      # 旧行为, 见下
+    python3 tools/patrol.py --no-park                # 不做倒车入库
+
+倒车入库 (总决赛"泊车入位 + 朝向"项):
+    航点跑完后, 先用 move_base 开到配置里的"起倒点", 原地转到背离库位的朝向,
+    再用 pose_servo() 倒进去。**不写死距离也不定时** —— 终止条件是"位姿到位",
+    控制器每帧取当前位姿, 用 cmd_vel 闭环收敛, 倒多远是结果不是输入。
+    位姿优先由"激光对墙"给出(拟合最近两面墙, 不依赖 AMCL/里程计, 角落处厘米以内),
+    拿不到才退回 AMCL。配置见 waypoints.yaml 的 reverse_park。
+    不想倒车: --no-park。
 
 朝向是怎么处理的 (重要):
     * 出发前用 cmd_vel 原地转到"行进方位" (--no-pre-rotate 可关)
@@ -45,6 +54,7 @@ import yaml
 from geometry_msgs.msg import PoseStamped, Twist
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from nav_msgs.msg import Odometry
+from sensor_msgs.msg import LaserScan
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from map_pixels import px2x, px2y, INNER        # noqa: E402
@@ -65,8 +75,13 @@ class Patrol(object):
         self.tf_listener = tf2_ros.TransformListener(self.tf)
         self.client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
         self.gt = None
+        self.scan = None            # 最新一帧 /scan, 给激光对墙定位用
         self.trace = []
         rospy.Subscriber('/odom_groundtruth', Odometry, self.cb_gt, queue_size=50)
+        rospy.Subscriber('/scan', LaserScan, self.cb_scan, queue_size=5)
+
+    def cb_scan(self, m):
+        self.scan = m
 
     def cb_gt(self, m):
         p = m.pose.pose.position
@@ -91,6 +106,171 @@ class Patrol(object):
     def stop(self):
         self.cmd_pub.publish(Twist())
         rospy.sleep(0.2)
+
+    # ---------------------------------------------------------------- 激光对墙定位
+    @staticmethod
+    def _fit_axis_line(pts, axis):
+        """最小二乘拟合一条"近轴"直线, 用来量墙。
+
+        axis='x': 拟合 x = a*y + b  (竖墙; 位姿朝向正确时 a=0, b=墙的 x 坐标)
+        axis='y': 拟合 y = a*x + b  (横墙; 位姿朝向正确时 a=0, b=墙的 y 坐标)
+        返回 (a, b); 点太少或退化时返回 None。
+        """
+        n = len(pts)
+        if n < 8:
+            return None
+        if axis == 'x':
+            U = [p[0] for p in pts]
+            V = [p[1] for p in pts]
+        else:
+            U = [p[1] for p in pts]
+            V = [p[0] for p in pts]
+        mv = sum(V) / n
+        mu = sum(U) / n
+        svv = sum((v - mv) ** 2 for v in V)
+        if svv < 1e-9:
+            return None
+        a = sum((V[i] - mv) * (U[i] - mu) for i in range(n)) / svv
+        return (a, mu - a * mv)
+
+    def laser_wall_pose(self, inner=2.076, band=0.40, max_iter=3, min_pts=10):
+        """用 2D 雷达"对墙"求一个**绝对**位姿 (只在墙边/角落有效)。
+
+        思路: 地图已知墙在 ±inner。把扫描点按当前位姿投到 map 系后, 贴近墙面的
+        那批点理应正好落在墙上。对这批点拟合直线:
+            * 斜率 -> 位姿的**朝向**误差
+            * 截距 -> 位姿的**位置**误差
+        迭代几次即收敛。
+
+        为什么不用 AMCL: 本场地只有四面墙, 方房间里沿墙滑移不可观测, AMCL 位置
+        误差约 5~6cm。而这里直接用激光测距, 在角落处能得到厘米级以下的绝对位置,
+        且不依赖里程计漂移。真机上同一路 /scan 可直接复用。
+
+        返回 (x, y, yaw) 或 None (可用点太少 / 没有雷达数据)。
+        """
+        scan = self.scan
+        rough = self.pose()
+        if scan is None or rough is None:
+            return None
+        try:
+            tr = self.tf.lookup_transform('map', scan.header.frame_id, rospy.Time(0),
+                                          rospy.Duration(0.3))
+        except Exception:
+            return None
+
+        # 雷达在车体坐标系里的固定偏移 (一次算好, 之后按候选位姿重新组装)
+        bx, by, bth = rough
+        dxw = tr.transform.translation.x - bx
+        dyw = tr.transform.translation.y - by
+        q = tr.transform.rotation
+        lth = math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))
+        c, s = math.cos(bth), math.sin(bth)
+        off = (c * dxw + s * dyw, -s * dxw + c * dyw, wrap(lth - bth))
+
+        ang = [scan.angle_min + i * scan.angle_increment for i in range(len(scan.ranges))]
+        rr = list(scan.ranges)
+        rmin, rmax = scan.range_min, scan.range_max
+
+        def compose(pose):
+            c2, s2 = math.cos(pose[2]), math.sin(pose[2])
+            return (pose[0] + c2 * off[0] - s2 * off[1],
+                    pose[1] + s2 * off[0] + c2 * off[1],
+                    pose[2] + off[2])
+
+        def collect(pose):
+            lx, ly, lth2 = compose(pose)
+            sx, sy = [], []
+            for i, r in enumerate(rr):
+                if not (rmin < r < rmax):
+                    continue
+                wx = lx + r * math.cos(lth2 + ang[i])
+                wy = ly + r * math.sin(lth2 + ang[i])
+                if abs(wx - wall_x) < band and abs(wy) < inner - 0.30:
+                    sx.append((wx, wy))
+                if abs(wy - wall_y) < band and abs(wx) < inner - 0.30:
+                    sy.append((wx, wy))
+            return sx, sy
+
+        wall_x = inner if bx > 0 else -inner
+        wall_y = inner if by > 0 else -inner
+
+        pose = [bx, by, bth]
+        for _ in range(max_iter):
+            sx, sy = collect(pose)
+            fx = self._fit_axis_line(sx, 'x')
+            fy = self._fit_axis_line(sy, 'y')
+            if fx and fy:
+                # 竖墙 x=a*y+b 与横墙 y=c*x+d: 朝向误差 eps = (-a + c)/2
+                eps = (-fx[0] + fy[0]) / 2.0
+                pose[2] = wrap(pose[2] - eps)
+            sx, sy = collect(pose)
+            if len(sx) >= min_pts:
+                pose[0] -= sum(p[0] for p in sx) / len(sx) - wall_x
+            if len(sy) >= min_pts:
+                pose[1] -= sum(p[1] for p in sy) / len(sy) - wall_y
+            if len(sx) < min_pts and len(sy) < min_pts:
+                return None
+        return (pose[0], pose[1], pose[2])
+
+    def pose_servo(self, tx, ty, tyaw, pos_tol=None, yaw_tol=None,
+                   vmax=0.16, vymax=0.12, wmax=0.5, kp=1.2, kyaw=2.0,
+                   reverse_only=True, timeout=45.0, label='park'):
+        """位姿伺服: 不经过 move_base, 直接用 cmd_vel 闭环收敛到 (tx,ty,tyaw)。
+
+        和 go_to() 的关键区别: **终止条件是"位姿到位", 不是"走了多少米"**。
+        倒车入库就该这么做 —— 距离是结果而非输入, 换个库位只改目标位姿即可。
+
+        位姿来源每帧先试"激光对墙"(绝对、精确), 拿不到就退回 AMCL/里程计。
+        麦轮可以一边倒一边横移修正, 不用来回摆头。
+
+        reverse_only=True 时纵向速度只允许 <= +0.02 (即只倒车, 不倒回去),
+        符合倒车入库的语义。
+
+        pos_tol 默认 0.012 m: 激光对墙的绝对精度约 3mm, 所以容差可以收到厘米级;
+        实测收到这个值能稳定收敛 (再紧会因控制抖动反复)。
+        """
+        pos_tol = self.a.park_pos_tol if pos_tol is None else pos_tol
+        yaw_tol = self.a.park_yaw_tol if yaw_tol is None else yaw_tol
+        rate = rospy.Rate(20)
+        t0 = rospy.Time.now()
+        n_laser = n_amcl = 0
+        err_xy = err_yaw = float('nan')
+        while not rospy.is_shutdown():
+            p = self.laser_wall_pose()
+            if p is not None:
+                n_laser += 1
+            else:
+                p = self.pose()
+                n_amcl += 1
+            if p is None:
+                rate.sleep()
+                continue
+            ex, ey = tx - p[0], ty - p[1]
+            eth = wrap(tyaw - p[2])
+            err_xy, err_yaw = math.hypot(ex, ey), abs(eth)
+            if err_xy < pos_tol and err_yaw < yaw_tol:
+                break
+            if (rospy.Time.now() - t0).to_sec() > timeout:
+                rospy.logwarn('  [%s] 位姿伺服超时: 剩 %.3f m / %.1f deg'
+                              % (label, err_xy, math.degrees(err_yaw)))
+                break
+            # 误差投影到车体系: 目标在车后方时 exb < 0 -> vx < 0 -> 倒车
+            c, s = math.cos(p[2]), math.sin(p[2])
+            exb = c * ex + s * ey
+            eyb = -s * ex + c * ey
+            vx = max(-vmax, min(0.02 if reverse_only else vmax, kp * exb))
+            vy = max(-vymax, min(vymax, kp * eyb))
+            wz = max(-wmax, min(wmax, kyaw * eth))
+            t = Twist()
+            t.linear.x, t.linear.y, t.angular.z = vx, vy, wz
+            self.cmd_pub.publish(t)
+            rate.sleep()
+        self.stop()
+        rospy.loginfo('  [%s] 位姿伺服结束  终误差 %.4f m / %.2f deg  用时 %.1fs'
+                      '  (激光 %d 帧 / AMCL %d 帧)'
+                      % (label, err_xy, math.degrees(err_yaw),
+                         (rospy.Time.now() - t0).to_sec(), n_laser, n_amcl))
+        return err_xy < pos_tol and err_yaw < yaw_tol
 
     def rotate_to(self, target_yaw, tol=0.02, timeout=15.0):
         """原地转到 target_yaw (rad). 返回最终误差(rad)"""
@@ -186,10 +366,23 @@ def load(path):
     # 回程目标可以和出生点不同: 出生点若在角落, 原地转向的几何余量太小,
     # move_base 会因为定位抖动把它判成碰撞而卡住。见 waypoints.yaml 的 return_to。
     ret = cfg.get('return_to') or start
+    # 倒车入库: {from: 起倒航点名, to: [x, y, yaw]}
+    park = cfg.get('reverse_park')
+    park = dict(park) if park else None
+    if park:
+        # 把起倒点的**名字**解析成坐标 (库位前的那个航点)
+        want = park.get('from')
+        hit = [w for w in wps if w['name'] == want]
+        if not hit:
+            raise ValueError('reverse_park.from=%r 不在航点列表里' % want)
+        park['from_xy'] = [hit[0]['x'], hit[0]['y']]
+        if len(park.get('to', [])) != 3:
+            raise ValueError('reverse_park.to 必须是 [x, y, yaw] 三项')
     return (wps,
             ([float(start[0]), float(start[1])] if start else None),
             (float(start_yaw) if start_yaw is not None else None),
-            ([float(ret[0]), float(ret[1])] if ret else None))
+            ([float(ret[0]), float(ret[1])] if ret else None),
+            park)
 
 
 # 底盘外接半径 + footprint_padding, 由 costmap_common_params.yaml 的 footprint 算得。
@@ -222,15 +415,32 @@ def main():
     ap.add_argument('--goal-includes-yaw', dest='goal_includes_yaw', action='store_true',
                     help='把最终朝向一起下给 move_base (旧行为)。默认不下: 先开到点, '
                          '朝向交给 cmd_vel 原地摆正 —— 不经过规划器, 贴墙也不会卡')
-    ap.set_defaults(pre_rotate=True, goal_includes_yaw=False)
+    ap.add_argument('--no-park', dest='do_park', action='store_false',
+                    help='忽略配置里的 reverse_park, 不做倒车入库')
+    ap.add_argument('--park-pos-tol', dest='park_pos_tol', type=float, default=0.012,
+                    help='倒车入库的位置容差(m), 默认 0.012。激光对墙精度约 3mm, '
+                         '所以可以收到厘米级; 再紧会因控制抖动反复')
+    ap.add_argument('--park-yaw-tol', dest='park_yaw_tol', type=float, default=0.02,
+                    help='倒车入库的朝向容差(rad), 默认 0.02 (~1.1 度)')
+    ap.set_defaults(pre_rotate=True, goal_includes_yaw=False, do_park=True)
     a = ap.parse_args()
 
-    wps, start, start_yaw, return_to = load(a.file)
+    wps, start, start_yaw, return_to, park = load(a.file)
     print('航点 %d 个 (来自 %s)' % (len(wps), a.file))
     for w in wps:
         print('   %-8s (%+.3f, %+.3f)%s'
               % (w['name'], w['x'], w['y'], clearance_note(w['x'], w['y'])))
-    if return_to:
+    if park:
+        px, py = float(park['to'][0]), float(park['to'][1])
+        # 配置里也能覆盖容差 (不写就用命令行/默认值)
+        a.park_pos_tol = float(park.get('pos_tol', a.park_pos_tol))
+        a.park_yaw_tol = float(park.get('yaw_tol', a.park_yaw_tol))
+        print('   %-8s (%+.3f, %+.3f)%s   ← 倒车入库: 从 %s 倒到这里, 朝向 %.1f deg'
+              '  (容差 %.3fm/%.1f°)'
+              % ('park', px, py, clearance_note(px, py),
+                 park.get('from', '?'), math.degrees(float(park['to'][2])),
+                 a.park_pos_tol, math.degrees(a.park_yaw_tol)))
+    elif return_to:
         print('   %-8s (%+.3f, %+.3f)%s   ← 最后回到这里摆正朝向'
               % ('return', return_to[0], return_to[1], clearance_note(*return_to)))
     if a.dry_run:
@@ -260,9 +470,31 @@ def main():
             for w in wps:
                 if p.go_to(w['name'], w['x'], w['y'], w['yaw']):
                     ok_n += 1
-            if return_to and not a.no_return_start:
-                p.go_to('return', return_to[0], return_to[1], yaw_home)
-            rospy.loginfo('一圈跑完: %d/%d 个航点成功' % (ok_n, len(wps)))
+            if park and a.do_park:
+                # ---- 倒车入库 ----
+                # 1) 先用 move_base(DWA) 开到"起倒点"(库里配的 from, 一般是最后一个航点)
+                fx, fy = float(park['from_xy'][0]), float(park['from_xy'][1])
+                tx, ty = float(park['to'][0]), float(park['to'][1])
+                tyaw = float(park['to'][2])
+                p.go_to(park.get('from', 'from'), fx, fy)
+                # 2) 原地转到"背离库位"的朝向, 这样接下来是纯倒车
+                back_yaw = math.atan2(fy - ty, fx - tx)
+                p.rotate_to(back_yaw)
+                # 3) 位姿伺服倒进去 (位姿优先用激光对墙, 不靠定时/定距)
+                converged = p.pose_servo(tx, ty, tyaw, label='park')
+                # 4) 和真值比一下, 看这次入位到底有多准
+                if p.gt:
+                    gx, gy = p.gt[0] - tx, p.gt[1] - ty
+                    rospy.loginfo('  [park] 对真值: 位置 %.4f m, 朝向 %.2f deg  %s'
+                                  % (math.hypot(gx, gy),
+                                     math.degrees(abs(wrap(p.gt[2] - tyaw))),
+                                     '✓ 入位' if converged else '✗ 未收敛'))
+                rospy.loginfo('一圈跑完: %d/%d 个航点成功 + 倒车入库'
+                              % (ok_n, len(wps)))
+            else:
+                if return_to and not a.no_return_start:
+                    p.go_to('return', return_to[0], return_to[1], yaw_home)
+                rospy.loginfo('一圈跑完: %d/%d 个航点成功' % (ok_n, len(wps)))
             if not a.loop:
                 break
     except KeyboardInterrupt:
