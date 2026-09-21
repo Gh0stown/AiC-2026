@@ -1,0 +1,26 @@
+# 车辆 + 车牌 (唯一真值源) —— 由 tools/setup_cars.py 生成
+#
+# 素材: ~/复赛资料/车辆识别/ (车牌背景 = 车尾视图; 车牌一/二/三)
+# 尺寸: 车板 34.5 x 25 cm x 5mm, 车牌 9.5 x 3 cm (官方 txt)
+# 车牌贴在车板正面后保险杠中间 (官方车尾图没画安装位, 按真车习惯)
+#
+# 站位: 右下角三个停车位 (x[1.472, 2.076]), 车尾朝 -x 朝车道
+cars:
+- name: car_1_p
+  model: car_1
+  plate: 苏A·B8Q62
+  parking: 3号停车位
+  x: 2.056
+  y: -0.501
+- name: car_2_p
+  model: car_2
+  plate: 鄂D·7B5Q2
+  parking: 2号停车位
+  x: 2.056
+  y: -1.1245
+- name: car_3_p
+  model: car_3
+  plate: 苏A·PL12A
+  parking: 1号停车位
+  x: 2.056
+  y: -1.762

@@ -170,5 +170,22 @@
       <pose>-0.1100 -1.2800 0.0020 0 0 1.5708</pose>
     </include>
     <!-- ===== 红绿灯结束 ===== -->
+          <!-- ===== 车辆+车牌 (tools/setup_cars.py 生成) ===== -->
+    <include>
+      <uri>model://car_1</uri>
+      <name>car_1_p</name>
+      <pose>2.0560 -0.5010 0 0 0 3.1416</pose>
+    </include>
+    <include>
+      <uri>model://car_2</uri>
+      <name>car_2_p</name>
+      <pose>2.0560 -1.1245 0 0 0 3.1416</pose>
+    </include>
+    <include>
+      <uri>model://car_3</uri>
+      <name>car_3_p</name>
+      <pose>2.0560 -1.7620 0 0 0 3.1416</pose>
+    </include>
+    <!-- ===== 车辆+车牌结束 ===== -->
   </world>
 </sdf>

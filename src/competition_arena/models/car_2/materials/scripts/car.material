@@ -1,0 +1,22 @@
+// 自动生成 (tools/setup_cars.py)
+// ★ 材质名必须**每个模型都不同**: OGRE 的材质是全局按名字注册的, 三个模型
+//   用同一个 Car/Plate 会互相覆盖, 结果三辆车显示同一张车牌 (踩过)。
+material Car/Body_car_2
+{
+  technique { pass {
+    ambient 1 1 1 1
+    diffuse 1 1 1 1
+    specular 0 0 0 0 0
+    texture_unit { texture car.png filtering anisotropic max_anisotropy 8 }
+  } }
+}
+material Car/Plate_car_2
+{
+  technique { pass {
+    ambient 1 1 1 1
+    diffuse 1 1 1 1
+    specular 0 0 0 0 0
+    alpha_rejection greater_equal 128
+    texture_unit { texture plate.png filtering anisotropic max_anisotropy 8 }
+  } }
+}
