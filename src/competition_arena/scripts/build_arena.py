@@ -101,19 +101,25 @@ def _run(mask, fixed, start, step, limit, axis):
     return n
 
 
-def boundary_rects(mask, arena_px):
+def boundary_rects(mask, arena_px, out_px=0):
     """The 4 rectangles forming the outer wall frame only.
 
     Each side's thickness is measured from the drawing (median over many scan
     lines), so this adapts to a different map instead of being hard-coded.
+
+    out_px > 0 时把整圈墙**向外平移** out_px 像素: 白线圈出来的 4.2x4.2 仍是
+    可行驶场地, 但围墙退到外面, 中间留出一圈空地给红绿灯之类的场外物料
+    (横排红绿灯 64cm 宽, 摆在车道边上时灯脚会伸到白线外)。
     """
     x0, y0, x1, y1 = arena_px
-    xs = list(range(x0 + 60, x1 - 60, 30))
-    ys = list(range(y0 + 60, y1 - 60, 30))
-    tt = int(np.median([_run(mask, x, y0, +1, y1, 'col') for x in xs]))
-    tb = int(np.median([_run(mask, x, y1 - 1, -1, y0, 'col') for x in xs]))
-    tl = int(np.median([_run(mask, y, x0, +1, x1, 'row') for y in ys]))
-    tr = int(np.median([_run(mask, y, x1 - 1, -1, x0, 'row') for y in ys]))
+    x0, y0, x1, y1 = x0 - out_px, y0 - out_px, x1 + out_px, y1 + out_px
+    bx0, by0, bx1, by1 = arena_px          # 测量用原始边界
+    xs = list(range(bx0 + 60, bx1 - 60, 30))
+    ys = list(range(by0 + 60, by1 - 60, 30))
+    tt = int(np.median([_run(mask, x, by0, +1, by1, 'col') for x in xs]))
+    tb = int(np.median([_run(mask, x, by1 - 1, -1, by0, 'col') for x in xs]))
+    tl = int(np.median([_run(mask, y, bx0, +1, bx1, 'row') for y in ys]))
+    tr = int(np.median([_run(mask, y, bx1 - 1, -1, bx0, 'row') for y in ys]))
     return [(x0, x1 - 1, y0, y0 + tt - 1),          # top
             (x0, x1 - 1, y1 - tb, y1 - 1),          # bottom
             (x0, x0 + tl - 1, y0, y1 - 1),          # left
@@ -161,7 +167,35 @@ class Frame(object):
 
 
 # ----------------------------------------------------------------------------- assets
-def write_floor_texture(img, frame, out_png, rotation_deg=90):
+def shift_boundary_in_mask(mask, arena_px, out_px):
+    """围墙外移后重新出地图: 把 mask 里的外沿白线从 arena 边挪到外侧 out_px 处。
+
+    为什么必须重出地图: 物理围墙外移后, 雷达看到的是新位置; 地图若还留着老位置,
+    AMCL 会持续看到 ~out_px 的系统性偏差。
+    返回 (新 mask, 新 arena_px)。
+    """
+    if out_px <= 0:
+        return mask, arena_px
+    x0, y0, x1, y1 = arena_px
+    br = boundary_rects(mask, arena_px)          # 原位置的 4 段
+    tt = br[0][3] - br[0][2] + 1
+    tb = br[1][3] - br[1][2] + 1
+    tl = br[2][1] - br[2][0] + 1
+    tr = br[3][1] - br[3][0] + 1
+    m = mask.copy()
+    for (rx0, rx1, ry0, ry1) in br:              # 抹掉原位置
+        m[ry0:ry1 + 1, rx0:rx1 + 1] = False
+    nx0, ny0, nx1, ny1 = x0 - out_px, y0 - out_px, x1 + out_px, y1 + out_px
+    ny0 = max(ny0, 0); nx0 = max(nx0, 0)
+    ny1 = min(ny1, m.shape[0]); nx1 = min(nx1, m.shape[1])
+    m[ny0:ny0 + tt, nx0:nx1] = True              # 新位置
+    m[ny1 - tb:ny1, nx0:nx1] = True
+    m[ny0:ny1, nx0:nx0 + tl] = True
+    m[ny0:ny1, nx1 - tr:nx1] = True
+    return m, (nx0, ny0, nx1, ny1)
+
+
+def write_floor_texture(img, frame, out_png, rotation_deg=90, pad_px=0):
     """Crop the map to the arena box and pre-rotate it.
 
     Gazebo maps a box's top-face UV so that texture +u runs along world -Y and
@@ -170,7 +204,8 @@ def write_floor_texture(img, frame, out_png, rotation_deg=90):
     90 deg counter-clockwise reconciles the two, so the floor image lines up
     exactly under the extruded wall geometry.
     """
-    crop = img.crop((frame.x0, frame.y0, frame.x1, frame.y1))
+    crop = img.crop((frame.x0 - pad_px, frame.y0 - pad_px,
+                     frame.x1 + pad_px, frame.y1 + pad_px))
     crop.save(out_png.replace('.png', '_unrotated_reference.png'))
     k = int(round(rotation_deg / 90.0)) % 4
     if k:
@@ -315,7 +350,7 @@ def build_world(walls, stripes, frame, args):
 
     widths = [min(r[1] - r[0] + 1, r[3] - r[2] + 1) for r in walls]
     return WORLD_TMPL.format(
-        arena='%.3f' % args.arena,
+        arena='%.3f' % (args.arena + 2.0 * args.margin),
         wall_h='%.3f' % args.wall_height,
         wall_mm=float(np.median(widths)) * frame.scale * 1000.0,
         wall_mode=('仅外沿围墙' if args.walls == 'boundary' else '全部墙体 (含内部隔墙)'),
@@ -363,7 +398,12 @@ def main():
                     help='boundary=只做外沿围墙 (默认); all=把图中所有线条都做成墙')
     ap.add_argument('--texture-rotation', type=int, default=90, choices=[0, 90, 180, 270],
                     help='地面贴图逆时针预旋转角度, 用于对齐 Gazebo 的 box UV (默认 90)')
+    ap.add_argument('--margin', type=float, default=0.10,
+                    help='白线场地之外再留出的空地宽 (m), 默认 0.10 (= 原图外圈到白线的距离)。'
+                         '围墙退到白线外 margin 处, 地板/贴图/ROS 地图同步外扩。'
+                         '白线圈出来的仍是 --arena x --arena。给红绿灯等场外物料留位置')
     args = ap.parse_args()
+    out_px = int(round(args.margin / (args.arena / (ARENA_PX[2] - ARENA_PX[0]))))
 
     if not os.path.isfile(SRC_IMG):
         sys.exit('找不到原始地图: %s' % SRC_IMG)
@@ -373,8 +413,10 @@ def main():
     rects = vectorize(mask)
     walls, top_s, mid_s = classify(rects)
     if args.walls == 'boundary':
-        walls = boundary_rects(mask, ARENA_PX)
+        walls = boundary_rects(mask, ARENA_PX, out_px)
     frame = Frame(ARENA_PX, args.arena)
+    map_mask, map_px = shift_boundary_in_mask(mask, ARENA_PX, out_px)
+    map_frame = Frame(map_px, args.arena + 2.0 * args.margin)
 
     # ---- sanity: reconstruction quality
     recon = np.zeros_like(mask)
@@ -387,7 +429,11 @@ def main():
     print('  场地像素范围  : x[%d,%d) y[%d,%d)  = %d x %d px'
           % (frame.x0, frame.x1, frame.y0, frame.y1, frame.x1 - frame.x0, frame.y1 - frame.y0))
     print('  比例尺        : %.4f mm / px' % (frame.scale * 1000))
-    print('  场地尺寸      : %.3f x %.3f m (外沿)' % (args.arena, args.arena))
+    print('  白线场地      : %.3f x %.3f m (可行驶)' % (args.arena, args.arena))
+    print('  外扩空地      : %.3f m/边 (围墙在白线外)  = %d px'
+          % (args.margin, out_px))
+    print('  地板总尺寸    : %.3f x %.3f m'
+          % (args.arena + 2 * args.margin, args.arena + 2 * args.margin))
     print('  墙体模式      : %s' % args.walls)
     print('  提取矩形      : %d 个 (墙 %d, 顶部条纹 %d, 中部条纹 %d)'
           % (len(rects), len(walls), len(top_s), len(mid_s)))
@@ -404,12 +450,12 @@ def main():
     os.makedirs(tex_dir, exist_ok=True)
     os.makedirs(scr_dir, exist_ok=True)
     floor_png = os.path.join(tex_dir, 'arena_floor.png')
-    write_floor_texture(img, frame, floor_png, args.texture_rotation)
+    write_floor_texture(img, frame, floor_png, args.texture_rotation, pad_px=out_px)
     with open(os.path.join(scr_dir, 'arena.material'), 'w') as f:
         f.write(MATERIAL_TMPL)
 
     os.makedirs(os.path.join(PKG, 'maps'), exist_ok=True)
-    shape = write_ros_map(mask, frame, args.map_resolution,
+    shape = write_ros_map(map_mask, map_frame, args.map_resolution,
                           os.path.join(PKG, 'maps', 'arena_map.pgm'),
                           os.path.join(PKG, 'maps', 'arena_map.yaml'))
 

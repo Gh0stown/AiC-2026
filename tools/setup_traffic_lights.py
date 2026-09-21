@@ -122,7 +122,13 @@ def model_sdf(name, layout, posts='double'):
          #   根本碰不到地面。我们按官方尺寸做成"落地", 就必须老实给重力。
          #   三颗灯珠保持无重力 (由关节托着, 不受力)。
          '    <link name="base">',
-         '      <inertial><pose>0 0 %.3f 0 0 0</pose><mass>4</mass><inertia>'
+         # ★ 灯箱关重力 —— 配合"整只灯离地 2mm 悬放"(见 world 里的 pose z=0.002):
+         #   这样灯既不落体、也不与地面产生接触, 因此**完全不会漂**。
+         #   踩过的坑: 开着重力时灯脚底面正好压在 z=0 上, 零穿透接触让求解器持续
+         #   微推, 实测以 ~0.1mm/s 匀速慢漂(5 分钟能漂 3cm); 而且起步时会有
+         #   "落地弹跳"的观感。旧模型之所以没这问题, 是因为它悬空 10cm 碰不到地面。
+         '      <gravity>false</gravity>',
+         '      <inertial><pose>0 0 %.3f 0 0 0</pose><mass>8</mass><inertia>'
          '<ixx>0.009</ixx><ixy>0</ixy><ixz>0</ixz><iyy>0.139</iyy><iyz>0</iyz>'
          '<izz>0.143</izz></inertia></inertial>' % (HOUSING_Z + HOUSING_H / 2.0),
          # ---- 灯箱 ----
@@ -144,18 +150,22 @@ def model_sdf(name, layout, posts='double'):
                  % (i, py, HOUSING_Z / 2.0, POST_W, POST_W, HOUSING_Z,
                     rgba(HOUSING_C), rgba(HOUSING_C)))
         o.append('      <collision name="post%d_c"><pose>0 %.3f %.3f 0 0 0</pose><geometry>'
-                 '<box><size>%.3f %.3f %.3f</size></box></geometry></collision>'
+                 '<box><size>%.3f %.3f %.3f</size></box></geometry>'
+                 '<surface><friction><ode><mu>5.0</mu><mu2>5.0</mu2></ode></friction>'
+                 '</surface></collision>'
                  % (i, py, HOUSING_Z / 2.0, POST_W, POST_W, HOUSING_Z))
         # 底脚 (向前后伸出的薄板, 像照片里的支架脚) —— 也要做碰撞体,
         # 否则支撑多边形在 x 方向只有支架的 2.5cm 宽, 容易前后倒
-        foot_x = 0.200 if not single else 0.150
+        foot_x = 0.160 if not single else 0.130
         foot_y = 0.050 if not single else 0.110
         o.append('      <visual name="foot%d"><pose>0 %.3f 0.006 0 0 0</pose><geometry>'
                  '<box><size>%.3f %.3f 0.012</size></box></geometry><material>'
                  '<ambient>0.25 0.25 0.26 1</ambient><diffuse>0.25 0.25 0.26 1</diffuse>'
                  '</material></visual>' % (i, py, foot_x, foot_y))
         o.append('      <collision name="foot%d_c"><pose>0 %.3f 0.006 0 0 0</pose><geometry>'
-                 '<box><size>%.3f %.3f 0.012</size></box></geometry></collision>'
+                 '<box><size>%.3f %.3f 0.012</size></box></geometry>'
+                 '<surface><friction><ode><mu>5.0</mu><mu2>5.0</mu2></ode></friction>'
+                 '</surface></collision>'
                  % (i, py, foot_x, foot_y))
 
     # ---- 三颗"常驻暗透镜" (真实红绿灯的三个透镜始终可见, 只是亮暗不同) ----
