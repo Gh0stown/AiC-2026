@@ -84,7 +84,22 @@ def lamp_offsets(layout):
             'green':  (0.0, +LAMP_PITCH, hz)}
 
 
-def model_sdf(name, layout):
+def model_sdf(name, layout, posts='double'):
+    """按官方尺寸生成红绿灯模型。
+
+    layout='horizontal': 灯箱 0.64 宽 × 0.14 高, 灯珠沿 +y 排开(红-黄-绿)
+    layout='vertical':   同一灯箱转 90° (官方只有横排, 这个仅作备用)
+
+    posts='double': 左右两根支架 (和官方照片一致)
+    posts='single': 正中一根支架
+
+    为什么需要 single: 横排灯 64 cm 宽, 若正面朝 +x 摆在顶部墙边, 双支架的
+    间距是 59 cm, 靠内的那根会正好落进 60 cm 宽的车道里挡路。单支架只占 2.5 cm,
+    摆在 y=2.00 (车道边缘 1.94 之外) 就不挡了。朝 +y 摆的下灯不受此影响。
+
+    模型原点在**地面**、水平居中 -> world 里 <pose>x y 0 yaw</pose> 即可站稳。
+    """
+    single = (posts == 'single')
     if layout == 'vertical':
         bw, bh = HOUSING_H, HOUSING_W          # 灯箱 宽(y) × 高(z) = 14 × 64 cm
     else:
@@ -99,9 +114,17 @@ def model_sdf(name, layout):
     o = ['<?xml version="1.0"?>', '<sdf version="1.7">', '  <model name="%s">' % name,
          '    <!-- 按官方尺寸生成, 见 tools/setup_traffic_lights.py 顶部说明 -->',
          '    <static>false</static>', '    <self_collide>false</self_collide>',
-         '    <link name="base">', '      <gravity>false</gravity>',
-         '      <inertial><mass>4</mass><inertia><ixx>0.05</ixx><ixy>0</ixy><ixz>0</ixz>'
-         '<iyy>0.05</iyy><iyz>0</iyz><izz>0.05</izz></inertia></inertial>',
+         # ★ 灯箱必须**受重力**。
+         #   踩过的坑 (2026-09-21): 一开始照旧模型写 <gravity>false</gravity>,
+         #   结果灯脚正好落在地面 z=0 上, 一旦有接触力, 没有重力的模型就被顶飞 ——
+         #   实测 3 秒漂 0.08 m、23 秒漂 0.26 m (z 一直涨)。
+         #   旧模型之所以没这个问题, 是因为它的脚离地 10cm(整个模型是悬空道具),
+         #   根本碰不到地面。我们按官方尺寸做成"落地", 就必须老实给重力。
+         #   三颗灯珠保持无重力 (由关节托着, 不受力)。
+         '    <link name="base">',
+         '      <inertial><pose>0 0 %.3f 0 0 0</pose><mass>4</mass><inertia>'
+         '<ixx>0.009</ixx><ixy>0</ixy><ixz>0</ixz><iyy>0.139</iyy><iyz>0</iyz>'
+         '<izz>0.143</izz></inertia></inertial>' % (HOUSING_Z + HOUSING_H / 2.0),
          # ---- 灯箱 ----
          '      <visual name="housing"><pose>0 0 %.3f 0 0 0</pose><geometry><box>'
          '<size>%.3f %.3f %.3f</size></box></geometry><material><ambient>%s</ambient>'
@@ -111,9 +134,10 @@ def model_sdf(name, layout):
          '<size>%.3f %.3f %.3f</size></box></geometry></collision>'
          % (hz, HOUSING_D, bw, bh)]
 
-    # ---- 支架: 竖排在正中一根, 横排在左右两端各一根 ----
-    posts = [0.0] if layout == 'vertical' else [-(bw / 2 - POST_W), +(bw / 2 - POST_W)]
-    for i, py in enumerate(posts):
+    # ---- 支架: 默认左右两根 (官方照片); single 则正中一根 ----
+    posts_y = [0.0] if (single or layout == 'vertical') else \
+              [-(bw / 2 - POST_W), +(bw / 2 - POST_W)]
+    for i, py in enumerate(posts_y):
         o.append('      <visual name="post%d"><pose>0 %.3f %.3f 0 0 0</pose><geometry>'
                  '<box><size>%.3f %.3f %.3f</size></box></geometry><material>'
                  '<ambient>%s</ambient><diffuse>%s</diffuse></material></visual>'
@@ -122,11 +146,17 @@ def model_sdf(name, layout):
         o.append('      <collision name="post%d_c"><pose>0 %.3f %.3f 0 0 0</pose><geometry>'
                  '<box><size>%.3f %.3f %.3f</size></box></geometry></collision>'
                  % (i, py, HOUSING_Z / 2.0, POST_W, POST_W, HOUSING_Z))
-        # 底脚 (向前后伸出的薄板, 像照片里的支架脚)
+        # 底脚 (向前后伸出的薄板, 像照片里的支架脚) —— 也要做碰撞体,
+        # 否则支撑多边形在 x 方向只有支架的 2.5cm 宽, 容易前后倒
+        foot_x = 0.200 if not single else 0.150
+        foot_y = 0.050 if not single else 0.110
         o.append('      <visual name="foot%d"><pose>0 %.3f 0.006 0 0 0</pose><geometry>'
-                 '<box><size>0.160 %.3f 0.012</size></box></geometry><material>'
+                 '<box><size>%.3f %.3f 0.012</size></box></geometry><material>'
                  '<ambient>0.25 0.25 0.26 1</ambient><diffuse>0.25 0.25 0.26 1</diffuse>'
-                 '</material></visual>' % (i, py, POST_W * 1.3))
+                 '</material></visual>' % (i, py, foot_x, foot_y))
+        o.append('      <collision name="foot%d_c"><pose>0 %.3f 0.006 0 0 0</pose><geometry>'
+                 '<box><size>%.3f %.3f 0.012</size></box></geometry></collision>'
+                 % (i, py, foot_x, foot_y))
 
     # ---- 三颗"常驻暗透镜" (真实红绿灯的三个透镜始终可见, 只是亮暗不同) ----
     for c, (ox, oy, oz) in off.items():
@@ -158,17 +188,29 @@ def model_sdf(name, layout):
     return '\n'.join(o)
 
 
+def model_name_of(L):
+    """配置文件里的 model 是基名; 单支架版本加 _single 后缀 (两盏灯可能共用模型)。"""
+    base = L['model']
+    return base if L.get('posts', 'double') == 'double' else '%s_single' % base
+
+
 def write_models(lights):
     made = []
+    seen = set()
     for L in lights:
-        name = L['model']                       # traffic_light_v / traffic_light_h
-        d = os.path.join(PKG, 'models', name)
+        model_name = model_name_of(L)
+        if model_name in seen:
+            continue
+        seen.add(model_name)
+        layout = L.get('layout', 'horizontal')
+        posts = L.get('posts', 'double')
+        d = os.path.join(PKG, 'models', model_name)
         os.makedirs(d, exist_ok=True)
-        open(os.path.join(d, 'model.sdf'), 'w').write(model_sdf(name, L['layout']))
+        open(os.path.join(d, 'model.sdf'), 'w').write(model_sdf(model_name, layout, posts))
         open(os.path.join(d, 'model.config'), 'w').write(
             '<?xml version="1.0"?>\n<model>\n  <name>%s</name>\n  <version>1.0</version>\n'
-            '  <sdf version="1.7">model.sdf</sdf>\n  <description>临时红绿灯(物理切换)</description>\n'
-            '</model>\n' % name)
+            '  <sdf version="1.7">model.sdf</sdf>\n  <description>红绿灯(物理切换, 按官方尺寸)</description>\n'
+            '</model>\n' % model_name)
         made.append(d)
     return made
 
@@ -177,7 +219,7 @@ def world_includes(lights):
     out = [BEGIN]
     for L in lights:
         out.append('    <include>')
-        out.append('      <uri>model://%s</uri>' % L['model'])
+        out.append('      <uri>model://%s</uri>' % model_name_of(L))
         out.append('      <name>%s</name>' % L['name'])
         out.append('      <pose>%.4f %.4f %.4f 0 0 %.4f</pose>'
                    % (L['x'], L['y'], L['z'], L.get('yaw', 0.0)))
