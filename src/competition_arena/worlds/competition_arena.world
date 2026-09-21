@@ -106,19 +106,7 @@
       </link>
     </model>
 
-              <!-- ===== 临时红绿灯 (tools/setup_traffic_lights.py 生成) ===== -->
-    <include>
-      <uri>model://traffic_light_h</uri>
-      <name>tl_top</name>
-      <pose>-0.5060 1.7790 0.0020 0 0 0.0000</pose>
-    </include>
-    <include>
-      <uri>model://traffic_light_h</uri>
-      <name>tl_bot</name>
-      <pose>-0.1100 -1.4560 0.0020 0 0 1.5708</pose>
-    </include>
-    <!-- ===== 红绿灯结束 ===== -->
-        <!-- ===== 人物立牌 (tools/setup_standees.py 生成) ===== -->
+                  <!-- ===== 人物立牌 (tools/setup_standees.py 生成) ===== -->
     <include>
       <uri>model://standee_c01</uri>
       <name>A_north_1</name>
@@ -170,5 +158,17 @@
       <pose>-0.4390 0.1089 0 0 0 0.0000</pose>
     </include>
     <!-- ===== 人物立牌结束 ===== -->
+      <!-- ===== 临时红绿灯 (tools/setup_traffic_lights.py 生成) ===== -->
+    <include>
+      <uri>model://traffic_light_h</uri>
+      <name>tl_top</name>
+      <pose>-0.5060 1.7790 0.0020 0 0 0.0000</pose>
+    </include>
+    <include>
+      <uri>model://traffic_light_h</uri>
+      <name>tl_bot</name>
+      <pose>-0.1100 -1.2800 0.0020 0 0 1.5708</pose>
+    </include>
+    <!-- ===== 红绿灯结束 ===== -->
   </world>
 </sdf>
