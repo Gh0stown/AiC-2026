@@ -106,26 +106,55 @@
       </link>
     </model>
 
-                  <!-- ===== 人物立牌 (tools/setup_standees.py 生成) ===== -->
+                    <!-- ===== 临时红绿灯 (tools/setup_traffic_lights.py 生成) ===== -->
+    <include>
+      <uri>model://traffic_light_h</uri>
+      <name>tl_top</name>
+      <pose>-0.5060 1.7790 0.0020 0 0 0.0000</pose>
+    </include>
+    <include>
+      <uri>model://traffic_light_h</uri>
+      <name>tl_bot</name>
+      <pose>-0.1100 -1.2800 0.0020 0 0 1.5708</pose>
+    </include>
+    <!-- ===== 红绿灯结束 ===== -->
+                <!-- ===== 车辆+车牌 (tools/setup_cars.py 生成) ===== -->
+    <include>
+      <uri>model://car_1</uri>
+      <name>car_1_p</name>
+      <pose>2.0560 -0.5010 0 0 0 3.1416</pose>
+    </include>
+    <include>
+      <uri>model://car_2</uri>
+      <name>car_2_p</name>
+      <pose>2.0560 -1.1245 0 0 0 3.1416</pose>
+    </include>
+    <include>
+      <uri>model://car_3</uri>
+      <name>car_3_p</name>
+      <pose>2.0560 -1.7620 0 0 0 3.1416</pose>
+    </include>
+    <!-- ===== 车辆+车牌结束 ===== -->
+      <!-- ===== 人物立牌 (tools/setup_standees.py 生成) ===== -->
     <include>
       <uri>model://standee_c01</uri>
       <name>A_north_1</name>
-      <pose>-1.1942 1.4360 0 0 0 1.5708</pose>
+      <pose>-1.3496 1.4360 0 0 0 1.5708</pose>
     </include>
     <include>
       <uri>model://standee_c02</uri>
       <name>A_north_2</name>
-      <pose>0.5652 1.4360 0 0 0 1.5708</pose>
+      <pose>-0.5744 1.4360 0 0 0 1.5708</pose>
     </include>
     <include>
       <uri>model://standee_c03</uri>
       <name>A_south_1</name>
-      <pose>-1.1942 0.8790 0 0 0 -1.5708</pose>
+      <pose>-1.3496 0.8790 0 0 0 -1.5708</pose>
     </include>
     <include>
       <uri>model://standee_c04</uri>
       <name>A_south_2</name>
-      <pose>0.5652 0.8790 0 0 0 -1.5708</pose>
+      <pose>-0.5744 0.8790 0 0 0 -1.5708</pose>
     </include>
     <include>
       <uri>model://standee_c05</uri>
@@ -158,34 +187,5 @@
       <pose>-0.4390 0.1089 0 0 0 0.0000</pose>
     </include>
     <!-- ===== 人物立牌结束 ===== -->
-      <!-- ===== 临时红绿灯 (tools/setup_traffic_lights.py 生成) ===== -->
-    <include>
-      <uri>model://traffic_light_h</uri>
-      <name>tl_top</name>
-      <pose>-0.5060 1.7790 0.0020 0 0 0.0000</pose>
-    </include>
-    <include>
-      <uri>model://traffic_light_h</uri>
-      <name>tl_bot</name>
-      <pose>-0.1100 -1.2800 0.0020 0 0 1.5708</pose>
-    </include>
-    <!-- ===== 红绿灯结束 ===== -->
-                <!-- ===== 车辆+车牌 (tools/setup_cars.py 生成) ===== -->
-    <include>
-      <uri>model://car_1</uri>
-      <name>car_1_p</name>
-      <pose>2.0560 -0.5010 0 0 0 3.1416</pose>
-    </include>
-    <include>
-      <uri>model://car_2</uri>
-      <name>car_2_p</name>
-      <pose>2.0560 -1.1245 0 0 0 3.1416</pose>
-    </include>
-    <include>
-      <uri>model://car_3</uri>
-      <name>car_3_p</name>
-      <pose>2.0560 -1.7620 0 0 0 3.1416</pose>
-    </include>
-    <!-- ===== 车辆+车牌结束 ===== -->
   </world>
 </sdf>
