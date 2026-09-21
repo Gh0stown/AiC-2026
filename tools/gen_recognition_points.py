@@ -332,6 +332,10 @@ def seg_hit_rect(seg, cx, cy, yaw, hx, hy):
 #  4. 目标
 # =============================================================================
 def standee_box(x, y, yaw, w):
+    """★ 立牌"朝哪边"= 模型局部 **-x** 面 (实拍标定, 见 gen_standees.py 的说明):
+    人物图只渲染在 -x 面, +x 面是透明的、背板就贴在那面。
+    所以朝向法线 = **-(cos yaw, sin yaw)**, 不是 +(cos yaw, sin yaw)。
+    (这一条搞错的后果: A_north/A_south 的点位会互换、A_west/B_north 直接无解。)"""
     hx, hy = GS.THICK / 2.0, w / 2.0
     z0, z1 = GS.BASE_H, GS.BASE_H + GS.STANDEE_H
     c, s = math.cos(yaw), math.sin(yaw)
@@ -340,7 +344,7 @@ def standee_box(x, y, yaw, w):
         for dy in (+hy, -hy):
             for z in (z0, z1):
                 pts.append([x + dx * c - dy * s, y + dx * s + dy * c, z])
-    return dict(x=x, y=y, w=w, normal=(c, s), z0=z0, z1=z1,
+    return dict(x=x, y=y, w=w, normal=(-c, -s), z0=z0, z1=z1,
                 foot=(GS.BASE_X / 2.0, w / 2.0), pts=pts)
 
 
