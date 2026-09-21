@@ -38,7 +38,10 @@ BEGIN = '    <!-- ===== 人物立牌 (tools/setup_standees.py 生成) ===== -->'
 END = '    <!-- ===== 人物立牌结束 ===== -->'
 
 INSET = 0.032          # 从街区边线往内缩, 盖住立牌底座进深(0.045/2=0.0225)并留余量
-SPREAD_MIN = 0.12      # 同一条边上相邻人偶的最小间距
+# ★ 同一方向的几个人偶**紧凑成一组**、居中摆在该边上。
+#   识别是"机器人开到固定点位、原地转向拍照", 一组人偶挤在一起才容易一张图拍全;
+#   沿整条边铺开的话, 离得远的那个要么出画、要么像素太小。
+CLUSTER_GAP = 0.090    # 同组内相邻人偶的间距 (m)
 
 # 边 -> (朝向 yaw, 沿哪根轴排开)
 EDGE = {
@@ -61,21 +64,14 @@ def edge_points(rect, edge, n):
         fixed, lo, hi = x1 - INSET, y0, y1
     else:
         fixed, lo, hi = x0 + INSET, y0, y1
-    # 两端留半个间距, 中间等分
-    pad = max(0.08, (hi - lo) * 0.12)
-    lo, hi = lo + pad, hi - pad
-    if n == 1:
-        ts = [0.5]
-    else:
+    # 居中成组: 以该边中点为中心, 按 CLUSTER_GAP 排开
+    mid = (lo + hi) / 2.0
+    span = CLUSTER_GAP * (n - 1)
+    if span > (hi - lo):                     # 边太短就按边宽压缩
         span = hi - lo
-        need = SPREAD_MIN * (n - 1)
-        if span < need:                      # 边太短就贴两端
-            ts = [i / float(n - 1) for i in range(n)]
-        else:
-            ts = [i / float(n - 1) for i in range(n)]
     out = []
-    for t in ts:
-        v = lo + t * (hi - lo)
+    for i in range(n):
+        v = mid - span / 2.0 + (i * span / (n - 1) if n > 1 else 0.0)
         if along == 'x':
             out.append((v, fixed, yaw))
         else:
@@ -147,6 +143,38 @@ def main():
             print('  %s 街区 %-6s x%d  %s' % (blk['name'], e['edge'], len(e['people']),
                   ' '.join(p.replace('standee_', '') for p in e['people'])))
     print('  注意: 改了 world 要重启仿真才生效')
+    # ★ 干涉检查: 立牌不能压到红绿灯的脚上。
+    #   立牌是 static、红绿灯不是, 压上去会把灯顶起来 (踩过: tl_top 被 c02 顶歪一个角)
+    tl_cfg = os.path.join(PKG, 'config', 'traffic_lights.yaml')
+    if os.path.isfile(tl_cfg):
+        import math
+        LEG, FOOT_X, FOOT_Y = 0.615 / 2.0, 0.140, 0.050
+        obstacles = []
+        for L in yaml.safe_load(open(tl_cfg))['lights']:
+            yaw = float(L.get('yaw', 0.0))
+            for sgn in (-1, 1):
+                if abs(yaw - math.pi / 2) < 0.1:       # 朝 +y: 腿沿 x 排开
+                    lx = float(L['x']) + sgn * LEG
+                    ly = float(L['y'])
+                    obstacles.append((lx, ly, FOOT_Y, FOOT_X))
+                else:                                   # 朝 +x: 腿沿 y 排开
+                    lx = float(L['x'])
+                    ly = float(L['y']) + sgn * LEG
+                    obstacles.append((lx, ly, FOOT_X, FOOT_Y))
+        hit = 0
+        for blk in plan:
+            rect = [float(v) for v in blk['rect']]
+            for e in blk['edges']:
+                pts = edge_points(rect, e['edge'], len(e['people']))
+                for nm, (x, y, _) in zip(e['people'], pts):
+                    for (ox, oy, ow, oh) in obstacles:
+                        if abs(x - ox) < (ow / 2 + 0.05) and abs(y - oy) < (oh / 2 + 0.06):
+                            print('  ⚠ %s @(%+.3f,%+.3f) 可能压到红绿灯脚 @(%+.3f,%+.3f)'
+                                  % (nm.replace('standee_', ''), x, y, ox, oy))
+                            hit += 1
+        if hit == 0:
+            print('  干涉检查: 10 个立牌都没压到红绿灯的脚 ✓')
+
     uniq = [p for b in plan for e in b['edges'] for p in e['people']]
     if len(uniq) != len(set(uniq)):
         print('  ⚠ 有重复摆放的人偶!')
