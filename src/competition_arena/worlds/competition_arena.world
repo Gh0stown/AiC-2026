@@ -106,5 +106,17 @@
       </link>
     </model>
 
-        </world>
+            <!-- ===== 临时红绿灯 (tools/setup_traffic_lights.py 生成) ===== -->
+    <include>
+      <uri>model://traffic_light_v</uri>
+      <name>tl_top</name>
+      <pose>-0.1500 2.0000 0.0000 0 0 0.0000</pose>
+    </include>
+    <include>
+      <uri>model://traffic_light_h</uri>
+      <name>tl_bot</name>
+      <pose>-0.1200 -2.0000 0.0000 0 0 1.5708</pose>
+    </include>
+    <!-- ===== 红绿灯结束 ===== -->
+  </world>
 </sdf>

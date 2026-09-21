@@ -33,61 +33,127 @@ CFG = os.path.join(PKG, 'config', 'traffic_lights.yaml')
 BEGIN = '    <!-- ===== 临时红绿灯 (tools/setup_traffic_lights.py 生成) ===== -->'
 END = '    <!-- ===== 红绿灯结束 ===== -->'
 
-# ---- 尺寸 (m), 和相机几何匹配: 灯心 0.55 m, 相机高 0.20 m -> 1 m 外可识别 ----
-LAMP_R, LAMP_T, LENS_R = 0.050, 0.012, 0.056
-BOX_D, BOX_W, BOX_H = 0.080, 0.300, 0.440
-ON, OFF = 0.05, -0.03
-COLORS = {'red': '1 0.05 0.05 1', 'yellow': '1 0.75 0.0 1', 'green': '0.05 1 0.15 1'}
-GRAY = '0.13 0.13 0.14 1'
+# =============================================================================
+#  官方尺寸 —— 来源 ~/复赛资料/红绿灯/尺寸图片.png (2026-09-21 整理)
+#
+#    灯箱总宽 64 cm   灯箱高 14 cm   灯箱下沿离地 34 cm (上沿 48 cm)   支架宽 2.5 cm
+#    灯珠直径 8.5 cm、中心间距 22 cm —— 图上没标, 按"64cm 横线 = 1079px"定标量得
+#      (三个灯珠等距: 红-黄 373px, 黄-绿 372px)
+#
+#  颜色直接取自官方 6 张状态参考图 (~/复赛资料/红绿灯/红绿灯图片/):
+#    DARK = 灭灯时透镜塑料本身的颜色 (暗红/暗黄/暗绿, 中位色)
+#    LIT  = 点亮后的高饱和色 (中位色; 最亮那 8% 像素已经过曝成近白, 不能用)
+#
+#  ★ 关键认识: 真实红绿灯**三个透镜始终都可见、各自有色**, 只是亮/暗不同。
+#    所以模型里三个"暗透镜"是常驻视觉, 亮的那颗是把发光灯珠推到透镜前面。
+# =============================================================================
+HOUSING_W, HOUSING_H, HOUSING_D = 0.64, 0.14, 0.08   # 灯箱 宽 × 高 × 厚
+HOUSING_Z = 0.34                                     # 灯箱下沿离地
+LENS_R, LENS_T = 0.0425, 0.006                       # 常驻暗透镜 半径/厚
+LAMP_R, LAMP_T = 0.0425, 0.008                       # 发光灯珠   半径/厚
+LAMP_PITCH = 0.22                                    # 灯珠中心间距
+POST_W = 0.025                                       # 支架方柱边长
+# 关节位置: 亮 = 推到透镜前方(露出来); 灭 = 缩回灯箱内部(被不透光灯箱挡住)
+ON, OFF = 0.050, 0.010
+
+DARK = {'red':    (0.467, 0.106, 0.122),
+        'yellow': (0.588, 0.357, 0.094),
+        'green':  (0.094, 0.376, 0.227)}
+LIT = {'red':     (0.969, 0.227, 0.086),
+       'yellow':  (0.988, 0.976, 0.188),
+       'green':   (0.086, 0.941, 0.529)}
+HOUSING_C = (0.090, 0.102, 0.110)
 
 
-def offsets(layout):
-    d = 0.135 if layout == 'vertical' else 0.145
+def rgba(c, a=1.0):
+    return '%.3f %.3f %.3f %.2f' % (c[0], c[1], c[2], a)
+
+
+def lamp_offsets(layout):
+    """三颗灯珠相对**模型原点**(地面中心)的位置。红-黄-绿。"""
     if layout == 'vertical':
-        return {'red': (0, 0, d), 'yellow': (0, 0, 0), 'green': (0, 0, -d)}
-    return {'red': (0, d, 0), 'yellow': (0, 0, 0), 'green': (0, -d, 0)}
+        hz = HOUSING_Z + HOUSING_W / 2.0          # 竖排: 灯箱高 = 64cm
+        return {'red':    (0.0, 0.0, hz + LAMP_PITCH),
+                'yellow': (0.0, 0.0, hz),
+                'green':  (0.0, 0.0, hz - LAMP_PITCH)}
+    hz = HOUSING_Z + HOUSING_H / 2.0              # 横排: 灯箱高 = 14cm
+    # 灯面朝 +x。站在正面(+x 处)往 -x 看时, 右手边是 +y,
+    # 所以"红-黄-绿 从左到右"(官方尺寸图里的顺序) = 红在 -y、绿在 +y
+    return {'red':    (0.0, -LAMP_PITCH, hz),
+            'yellow': (0.0, 0.0, hz),
+            'green':  (0.0, +LAMP_PITCH, hz)}
 
 
 def model_sdf(name, layout):
-    w, h = (BOX_W, BOX_H) if layout == 'vertical' else (BOX_H, BOX_W)
-    off = offsets(layout)
+    if layout == 'vertical':
+        bw, bh = HOUSING_H, HOUSING_W          # 灯箱 宽(y) × 高(z) = 14 × 64 cm
+    else:
+        bw, bh = HOUSING_W, HOUSING_H          # 灯箱 宽(y) × 高(z) = 64 × 14 cm
+    off = lamp_offsets(layout)
+
+    # 灯箱中心 (模型原点在地面, 水平居中)
+    hz = HOUSING_Z + bh / 2.0
+    # 常驻暗透镜所在的平面: 灯箱正面再往外 0.5mm, 避免与箱面 z-fighting
+    fx = HOUSING_D / 2.0 + 0.0005
+
     o = ['<?xml version="1.0"?>', '<sdf version="1.7">', '  <model name="%s">' % name,
+         '    <!-- 按官方尺寸生成, 见 tools/setup_traffic_lights.py 顶部说明 -->',
          '    <static>false</static>', '    <self_collide>false</self_collide>',
          '    <link name="base">', '      <gravity>false</gravity>',
-         '      <inertial><mass>5</mass><inertia><ixx>0.05</ixx><ixy>0</ixy><ixz>0</ixz>'
+         '      <inertial><mass>4</mass><inertia><ixx>0.05</ixx><ixy>0</ixy><ixz>0</ixz>'
          '<iyy>0.05</iyy><iyz>0</iyz><izz>0.05</izz></inertia></inertial>',
-         '      <visual name="box"><pose>0 0 0 0 0 0</pose><geometry><box>'
+         # ---- 灯箱 ----
+         '      <visual name="housing"><pose>0 0 %.3f 0 0 0</pose><geometry><box>'
          '<size>%.3f %.3f %.3f</size></box></geometry><material><ambient>%s</ambient>'
-         '<diffuse>%s</diffuse></material></visual>' % (BOX_D, w, h, GRAY, GRAY),
-         '      <visual name="pole"><pose>0 0 -0.30 0 0 0</pose><geometry><cylinder>'
-         '<radius>0.018</radius><length>0.30</length></cylinder></geometry>'
-         '<material><ambient>0.35 0.35 0.36 1</ambient><diffuse>0.35 0.35 0.36 1</diffuse>'
-         '</material></visual>',
-         '      <visual name="foot"><pose>0 0 -0.44 0 0 0</pose><geometry><cylinder>'
-         '<radius>0.09</radius><length>0.02</length></cylinder></geometry>'
-         '<material><ambient>0.25 0.25 0.26 1</ambient><diffuse>0.25 0.25 0.26 1</diffuse>'
-         '</material></visual>']
+         '<diffuse>%s</diffuse></material></visual>'
+         % (hz, HOUSING_D, bw, bh, rgba(HOUSING_C), rgba(HOUSING_C)),
+         '      <collision name="housing_c"><pose>0 0 %.3f 0 0 0</pose><geometry><box>'
+         '<size>%.3f %.3f %.3f</size></box></geometry></collision>'
+         % (hz, HOUSING_D, bw, bh)]
+
+    # ---- 支架: 竖排在正中一根, 横排在左右两端各一根 ----
+    posts = [0.0] if layout == 'vertical' else [-(bw / 2 - POST_W), +(bw / 2 - POST_W)]
+    for i, py in enumerate(posts):
+        o.append('      <visual name="post%d"><pose>0 %.3f %.3f 0 0 0</pose><geometry>'
+                 '<box><size>%.3f %.3f %.3f</size></box></geometry><material>'
+                 '<ambient>%s</ambient><diffuse>%s</diffuse></material></visual>'
+                 % (i, py, HOUSING_Z / 2.0, POST_W, POST_W, HOUSING_Z,
+                    rgba(HOUSING_C), rgba(HOUSING_C)))
+        o.append('      <collision name="post%d_c"><pose>0 %.3f %.3f 0 0 0</pose><geometry>'
+                 '<box><size>%.3f %.3f %.3f</size></box></geometry></collision>'
+                 % (i, py, HOUSING_Z / 2.0, POST_W, POST_W, HOUSING_Z))
+        # 底脚 (向前后伸出的薄板, 像照片里的支架脚)
+        o.append('      <visual name="foot%d"><pose>0 %.3f 0.006 0 0 0</pose><geometry>'
+                 '<box><size>0.160 %.3f 0.012</size></box></geometry><material>'
+                 '<ambient>0.25 0.25 0.26 1</ambient><diffuse>0.25 0.25 0.26 1</diffuse>'
+                 '</material></visual>' % (i, py, POST_W * 1.3))
+
+    # ---- 三颗"常驻暗透镜" (真实红绿灯的三个透镜始终可见, 只是亮暗不同) ----
     for c, (ox, oy, oz) in off.items():
-        o.append('      <visual name="lens_%s"><pose>%.3f %.3f %.3f 0 1.5708 0</pose>'
-                 '<geometry><cylinder><radius>%.3f</radius><length>0.01</length></cylinder>'
-                 '</geometry><material><ambient>0.03 0.03 0.03 1</ambient>'
-                 '<diffuse>0.03 0.03 0.03 1</diffuse></material></visual>'
-                 % (c, ox + BOX_D / 2.0, oy, oz, LENS_R))
+        o.append('      <visual name="lens_%s"><pose>%.4f %.3f %.3f 0 1.5708 0</pose>'
+                 '<geometry><cylinder><radius>%.4f</radius><length>%.4f</length></cylinder>'
+                 '</geometry><material><ambient>%s</ambient><diffuse>%s</diffuse>'
+                 '</material></visual>'
+                 % (c, fx, oy, oz, LENS_R, LENS_T, rgba(DARK[c]), rgba(DARK[c])))
     o.append('    </link>')
+
+    # ---- 三颗发光灯珠 (挂在滑动关节上) ----
     for c, (ox, oy, oz) in off.items():
         o.append('    <link name="lamp_%s"><gravity>false</gravity>'
-                 '<pose>%.3f %.3f %.3f 0 0 0</pose>'
+                 '<pose>%.4f %.3f %.3f 0 0 0</pose>'
                  '<inertial><mass>0.02</mass><inertia><ixx>1e-5</ixx><ixy>0</ixy><ixz>0</ixz>'
                  '<iyy>1e-5</iyy><iyz>0</iyz><izz>1e-5</izz></inertia></inertial>'
                  '<visual name="lamp"><pose>0 0 0 0 1.5708 0</pose><geometry><cylinder>'
-                 '<radius>%.3f</radius><length>%.3f</length></cylinder></geometry><material>'
-                 '<ambient>%s</ambient><diffuse>%s</diffuse><emissive>%s</emissive></material>'
-                 '</visual></link>'
-                 % (c, ox, oy, oz, LAMP_R, LAMP_T, COLORS[c], COLORS[c], COLORS[c]))
+                 '<radius>%.4f</radius><length>%.4f</length></cylinder></geometry><material>'
+                 '<ambient>%s</ambient><diffuse>%s</diffuse><emissive>%s</emissive>'
+                 '</material></visual></link>'
+                 % (c, ox, oy, oz, LAMP_R, LAMP_T,
+                    rgba(LIT[c]), rgba(LIT[c]), rgba(LIT[c])))
         o.append('    <joint name="j_%s" type="prismatic"><parent>base</parent>'
                  '<child>lamp_%s</child><pose>0 0 0 0 0 0</pose><axis><xyz>1 0 0</xyz>'
                  '<limit><lower>%.3f</lower><upper>%.3f</upper><effort>1</effort>'
-                 '<velocity>1</velocity></limit></axis></joint>' % (c, c, OFF, ON))
+                 '<velocity>1</velocity></limit></axis></joint>'
+                 % (c, c, OFF - 0.005, ON + 0.005))
     o += ['  </model>', '</sdf>', '']
     return '\n'.join(o)
 
@@ -134,12 +200,18 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--remove', action='store_true')
     ap.add_argument('--show', action='store_true')
+    ap.add_argument('--models-only', dest='models_only', action='store_true',
+                    help='只重新生成模型文件, 不动 world (调模型时用)')
     a = ap.parse_args()
     lights = yaml.safe_load(open(CFG))['lights']
     if a.show:
         for L in lights:
             print('  %-8s %-18s (%+.2f, %+.2f, %.2f) yaw=%.2f %s'
                   % (L['name'], L['model'], L['x'], L['y'], L['z'], L.get('yaw', 0), L['layout']))
+        return
+    if a.models_only:
+        for d in write_models(lights):
+            print('  模型 ->', os.path.relpath(d, WS))
         return
     patch_world(lights, remove=a.remove)
     if a.remove:

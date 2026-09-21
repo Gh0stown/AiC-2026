@@ -40,14 +40,18 @@ import yaml
 from gazebo_msgs.srv import SetModelConfiguration
 from std_msgs.msg import String
 
-# ---- 尺寸 (m) ----
-LAMP_R = 0.050
-LAMP_T = 0.012
-LENS_R = 0.056
+# ---- 尺寸 (m) —— 与 tools/setup_traffic_lights.py 保持一致 (官方尺寸) ----
+LAMP_R = 0.0425        # 灯珠半径 (直径 8.5 cm, 官方尺寸图量得)
+LAMP_T = 0.008
+LENS_R = 0.0425        # 常驻暗透镜半径 (与灯珠同径)
 BOX_D = 0.080          # 灯箱厚度 (x, 正面方向)
-BOX_W = 0.300          # 竖排时是 y 向宽
-BOX_H = 0.440          # 竖排时是 z 向高
-ON, OFF = 0.05, -0.03      # 关节位置: 伸出灯箱 / 缩进灯箱
+BOX_W = 0.640          # 灯箱宽 (官方 64 cm)
+BOX_H = 0.140          # 灯箱高 (官方 14 cm)
+# 关节位置: 亮 = 把发光灯珠推到常驻透镜前方(看得见)
+#           灭 = 缩回灯箱内部(被不透光灯箱挡住)
+# 行程刻意做得很小(4cm), 所以从画面上看"灯珠并没有明显伸缩" —— 只是亮/暗与
+# 颜色变化, 接近真实红绿灯。这也是为了不让识别模型学到"位置"这种伪特征。
+ON, OFF = 0.050, 0.010
 
 
 class Node(object):
