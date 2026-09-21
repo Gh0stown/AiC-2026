@@ -44,6 +44,29 @@ THICK = 0.003          # 厚 3 mm
 BASE_H = 0.004         # 底座厚 4 mm (实物立牌下面有个折起来的支撑)
 BASE_X = 0.045         # 底座前后伸出 (防止前后倒)
 
+# =============================================================================
+#  街区摆放计划
+#  依据: 复赛任务示意图 —— A 街区人偶朝 北/南/西 (箭头 ←↓↑), B 街区朝 北/东 (箭头 ↑→)
+#        用户要求 —— 每个方向都要有人; 两个非社区人员 F1/F2 必须都摆、不重复, A/B 各一个
+#
+#  街区矩形: 白线是**车道线**, 街区是车道之间的区域 (由 build_arena 提取)
+#      A  x[-1.472, 0.843] y[0.847, 1.468]  2.32 x 0.62 m  (高 62cm ~ 示意图标注 60cm)
+#         北面=顶车道, 南面=中车道, 西面=左车道   (东面那条竖车道示意图上没人偶)
+#      B  x[-1.475, -0.407] y[-0.537, 0.197] 1.07 x 0.73 m
+#         北面=中车道, 东面=竖车道
+# =============================================================================
+BLOCKS = [
+    dict(name='A', rect=[-1.472, 0.847, 0.843, 1.468], edges=[
+        dict(edge='north', people=['standee_c01', 'standee_c02']),
+        dict(edge='south', people=['standee_c03', 'standee_c04']),
+        dict(edge='west',  people=['standee_c05', 'standee_F1']),
+    ]),
+    dict(name='B', rect=[-1.475, -0.537, -0.407, 0.197], edges=[
+        dict(edge='north', people=['standee_c06', 'standee_c07']),
+        dict(edge='east',  people=['standee_c08', 'standee_F2']),
+    ]),
+]
+
 
 def collect():
     """扫描素材目录, 返回 [(模型名, 源文件, 类别, 原图名)]"""
@@ -192,13 +215,10 @@ def main():
                     '# 素材: ~/复赛资料/人员/  (社区人员 1~16, 非社区人员 F1/F2)\n'
                     '# 尺寸: 高 %.3f m, 宽按各图长宽比 (用户确认实物 15x5 cm)\n'
                     '#\n'
-                    '# ★ 目前**只生成模型, 不摆进 world** (用户要求先不摆放)。\n'
-                    '#   要摆放时往 world 里加:\n'
-                    '#     <include><uri>model://standee_c01</uri><name>p_a1</name>\n'
-                    '#       <pose>x y 0 0 0 yaw</pose></include>\n'
-                    '#   朝向: 模型板面朝 +x, 所以 yaw 决定人偶面向哪边。\n\n'
+                    '# 摆放: 用 tools/setup_standees.py 按下面的 blocks 计划生成 <include>\n'
+                    '#   朝向: 模型板面朝 +x -> yaw 决定面向 (北=+y 90, 南=-y -90, 东=+x 0, 西=-x 180)\n\n'
                     % h)
-            yaml.safe_dump({'standees': manifest}, f, allow_unicode=True,
+            yaml.safe_dump({'standees': manifest, 'blocks': BLOCKS}, f, allow_unicode=True,
                            default_flow_style=False, sort_keys=False)
         print()
         print('  已生成 %d 个模型 -> src/competition_arena/models/standee_*/' % len(items))

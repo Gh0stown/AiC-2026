@@ -118,5 +118,57 @@
       <pose>-0.1100 -1.4560 0.0020 0 0 1.5708</pose>
     </include>
     <!-- ===== 红绿灯结束 ===== -->
+        <!-- ===== 人物立牌 (tools/setup_standees.py 生成) ===== -->
+    <include>
+      <uri>model://standee_c01</uri>
+      <name>A_north_1</name>
+      <pose>-1.1942 1.4360 0 0 0 1.5708</pose>
+    </include>
+    <include>
+      <uri>model://standee_c02</uri>
+      <name>A_north_2</name>
+      <pose>0.5652 1.4360 0 0 0 1.5708</pose>
+    </include>
+    <include>
+      <uri>model://standee_c03</uri>
+      <name>A_south_1</name>
+      <pose>-1.1942 0.8790 0 0 0 -1.5708</pose>
+    </include>
+    <include>
+      <uri>model://standee_c04</uri>
+      <name>A_south_2</name>
+      <pose>0.5652 0.8790 0 0 0 -1.5708</pose>
+    </include>
+    <include>
+      <uri>model://standee_c05</uri>
+      <name>A_west_1</name>
+      <pose>-1.4400 0.9270 0 0 0 3.1416</pose>
+    </include>
+    <include>
+      <uri>model://standee_F1</uri>
+      <name>A_west_2</name>
+      <pose>-1.4400 1.3880 0 0 0 3.1416</pose>
+    </include>
+    <include>
+      <uri>model://standee_c06</uri>
+      <name>B_north_1</name>
+      <pose>-1.3468 0.1650 0 0 0 1.5708</pose>
+    </include>
+    <include>
+      <uri>model://standee_c07</uri>
+      <name>B_north_2</name>
+      <pose>-0.5352 0.1650 0 0 0 1.5708</pose>
+    </include>
+    <include>
+      <uri>model://standee_c08</uri>
+      <name>B_east_1</name>
+      <pose>-0.4390 -0.4489 0 0 0 0.0000</pose>
+    </include>
+    <include>
+      <uri>model://standee_F2</uri>
+      <name>B_east_2</name>
+      <pose>-0.4390 0.1089 0 0 0 0.0000</pose>
+    </include>
+    <!-- ===== 人物立牌结束 ===== -->
   </world>
 </sdf>
