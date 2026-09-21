@@ -135,7 +135,7 @@
       <pose>2.0560 -1.7620 0 0 0 3.1416</pose>
     </include>
     <!-- ===== 车辆+车牌结束 ===== -->
-                <!-- ===== 人物立牌 (tools/setup_standees.py 生成) ===== -->
+                      <!-- ===== 人物立牌 (tools/setup_standees.py 生成) ===== -->
     <include>
       <uri>model://standee_c01</uri>
       <name>A_north_1</name>

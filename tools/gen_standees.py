@@ -149,11 +149,14 @@ material %s
           </script>
         </material>
       </visual>
-      <!-- ★ 背面挡板: Gazebo 的 box 会把贴图糊到**六个面**上, 于是从背后看
-           也是(镜像的)人物图 —— 实物的模切立牌背面是纯色卡纸。不挡的话:
+      <!-- ★ 背面挡板 (放 +x 面): Gazebo 的 box 会把贴图糊到**六个面**上, 于是从
+           背后看也是(镜像的)人物图 —— 实物的模切立牌背面是纯色卡纸。不挡的话:
              1) 视觉模型可能学到"正反两面都是人", 与真机域不一致 (sim2real 断裂);
-             2) 从背后拍到的图会被误判成"正视目标".
-           这里紧贴板背面加一块略大的纯色薄板, 从后面看就是纯色。 -->
+             2) 从背后拍到的图会被误判成"正视目标" (调试时就吃过这个亏)。
+           ★ 哪一面是"背面"是**实拍标定**出来的, 不是推的: 把车用 x:=/y:=/yaw:=
+             直接生成在 A_north 点位抓一帧 —— 挡板放 +x 时车道侧才看到人物图,
+             放 -x 时车道侧看到的是纯色板。所以**朝车道/街区外的是模型的 -x 面**。
+             改这里之前先跑一遍 tools/capture_points.py 核对。 -->
       <visual name="back">
         <pose>{xb:.4f} 0 {zb:.4f} 0 0 0</pose>
         <geometry><box><size>0.0010 {wb:.4f} {hb:.4f}</size></box></geometry>
@@ -179,7 +182,7 @@ material %s
            bx=BASE_X, bh=BASE_H, zbh=BASE_H / 2.0,
            # 背面挡板: 贴板背面 (板厚 t, 面在 +-t/2), 往外让 0.5mm 防 z-fighting,
            # 并比板略大 2mm, 保证从背后看完全遮住贴图
-           xb=-(THICK / 2.0 + 0.0005), wb=w + 0.002, hb=h + 0.002)
+           xb=(THICK / 2.0 + 0.0010), wb=w + 0.002, hb=h + 0.002)
     with open(os.path.join(d, 'model.sdf'), 'w') as f:
         f.write(sdf)
     with open(os.path.join(d, 'model.config'), 'w') as f:
