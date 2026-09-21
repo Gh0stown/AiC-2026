@@ -182,8 +182,11 @@ sensors:
     model: "Orbbec Astra Pro (仅 RGB)"     # [选定] camera_link mesh 宽 168mm ≈ Astra Pro 165mm
     mount:     [0.14914, -0.00049737, 0.19998]   # [实车] mowen2 camera_joint
     mount_rpy: [0.0, 0.0, 0.0]
-    width: 640                            # 嫌卡可以降到 320 (配合 height 240)
-    height: 480
+    # ★ 分辨率提到 1280x960 (2026-09-21): 车牌只有 9.5cm 宽, 640x480 时在 0.9m
+    #   处只占 67px (每字 ~9px), **不够 OCR**。1280x960 后同样距离约 134px,
+    #   贴到车道边缘 (0.605m) 有 198px -> 每字 28px ✓
+    width: 1280
+    height: 960
     horizontal_fov_deg: 58.0              # Astra Pro 深度视场角 58°H x 45.5°V
     range: [0.60, 8.0]                    # Astra Pro 深度范围 0.6~8 m
     mass: 0.17                            # [实车规格] Astra Pro 官方 165 g

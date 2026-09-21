@@ -4,7 +4,7 @@
   改参数请编辑 config/robot_params.yaml, 然后重新运行:
       python3 scripts/gen_robot.py
 
-  生成时间   : 2026-09-17 03:10:22
+  生成时间   : 2026-09-21 17:48:43
   底盘构型   : 四轮麦克纳姆 (X 型布局)
   轮径/轮宽  : 0.0485 / 0.0506 m
   轴距/轮距  : 0.2070 / 0.2908 m
@@ -255,7 +255,7 @@
       <update_rate>15</update_rate>
       <camera>
         <horizontal_fov>1.012291</horizontal_fov>
-        <image><width>640</width><height>480</height><format>R8G8B8</format></image>
+        <image><width>1280</width><height>960</height><format>R8G8B8</format></image>
         <clip><near>0.6</near><far>8</far></clip>
       </camera>
       <plugin name="camera_plugin" filename="libgazebo_ros_camera.so">

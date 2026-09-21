@@ -7,7 +7,7 @@ material Car/Body_car_1
     ambient 1 1 1 1
     diffuse 1 1 1 1
     specular 0 0 0 0 0
-    texture_unit { texture car.png filtering anisotropic max_anisotropy 8 }
+    texture_unit { texture car_1_car.png filtering anisotropic max_anisotropy 8 }
   } }
 }
 material Car/Plate_car_1
@@ -17,6 +17,6 @@ material Car/Plate_car_1
     diffuse 1 1 1 1
     specular 0 0 0 0 0
     alpha_rejection greater_equal 128
-    texture_unit { texture plate.png filtering anisotropic max_anisotropy 8 }
+    texture_unit { texture car_1_plate.png filtering anisotropic max_anisotropy 8 }
   } }
 }

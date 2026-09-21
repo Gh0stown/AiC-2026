@@ -49,10 +49,13 @@ END = '    <!-- ===== 车辆+车牌结束 ===== -->'
 BOARD_W, BOARD_H, BOARD_T = 0.345, 0.250, 0.005     # 车板 宽 x 高 x 厚
 PLATE_W, PLATE_H, PLATE_T = 0.095, 0.030, 0.003     # 车牌 宽 x 高 x 厚
 BASE_T = 0.006                                       # 底座厚
-# 车牌贴在车板正面的位置 (相对车板左下角): 水平居中, 高度 4.8cm
-#   官方车尾图没画车牌安装位, 按真车习惯放在后保险杠中间; 实测保险杠在
-#   z 0.014~0.079 m, 车牌 3cm 高居中放在 0.048 刚好落在保险杠上
-PLATE_CZ = 0.048
+# 车牌贴在车板正面的位置 (相对车板左下角)
+#   ★ 位置由用户标注决定: 用户在车尾图上画了红框 (手画, 12.54 x 4.94 cm,
+#     中心离车板底 11.65 cm) —— 按实车看车牌是装在后**备箱**上, 不是保险杠。
+#     车牌 9.5x3 cm 居中贴在红框中心。
+#     (一开始我按真车习惯放在后保险杠中间, 是错的; 官方车尾图上确实不明显)
+PLATE_CZ = 0.1165
+PLATE_CX = 0.0          # 水平偏移 (红框中心实测偏 -0.28cm, 可忽略)
 
 PARKING = [                                          # (车位名, y0, y1)  由 build_arena 提取
     ('3号停车位', -0.805, -0.197),
@@ -70,14 +73,20 @@ def write_car_model(name, plate_png, plate_text):
     d = os.path.join(PKG, 'models', name)
     tex = os.path.join(d, 'materials', 'textures')
     scr = os.path.join(d, 'materials', 'scripts')
+    # 先清空: 旧的 car.png / plate.png 残留会继续占着 OGRE 的全局贴图名
+    if os.path.isdir(tex):
+        shutil.rmtree(tex)
     os.makedirs(tex, exist_ok=True)
     os.makedirs(scr, exist_ok=True)
     # 车尾图缩小到合理分辨率 (2432px 对 34.5cm 是 70px/cm, 太大; 保留 ~28px/cm 够用)
     from PIL import Image
     bg = Image.open(os.path.join(SRC, '车牌背景.png')).convert('RGB')
     bg = bg.resize((968, 688), Image.LANCZOS)          # 968/(0.345*100) = 28 px/cm
-    bg.save(os.path.join(tex, 'car.png'))
-    shutil.copyfile(plate_png, os.path.join(tex, 'plate.png'))
+    # ★ 贴图文件名也必须**每个模型都不同**: OGRE 的**贴图**和材质一样是按名字
+    #   全局注册的。三个模型都叫 car.png / plate.png 的话, 第一个加载的会被后面
+    #   复用 —— 结果三辆车显示同一张车牌。(材质名唯一还不够!)
+    bg.save(os.path.join(tex, '%s_car.png' % name))
+    shutil.copyfile(plate_png, os.path.join(tex, '%s_plate.png' % name))
 
     with open(os.path.join(scr, 'car.material'), 'w') as f:
         f.write('''// 自动生成 (tools/setup_cars.py)
@@ -89,7 +98,7 @@ material Car/Body_%(name)s
     ambient 1 1 1 1
     diffuse 1 1 1 1
     specular 0 0 0 0 0
-    texture_unit { texture car.png filtering anisotropic max_anisotropy 8 }
+    texture_unit { texture %(name)s_car.png filtering anisotropic max_anisotropy 8 }
   } }
 }
 material Car/Plate_%(name)s
@@ -99,7 +108,7 @@ material Car/Plate_%(name)s
     diffuse 1 1 1 1
     specular 0 0 0 0 0
     alpha_rejection greater_equal 128
-    texture_unit { texture plate.png filtering anisotropic max_anisotropy 8 }
+    texture_unit { texture %(name)s_plate.png filtering anisotropic max_anisotropy 8 }
   } }
 }
 ''' % dict(name=name))
@@ -123,7 +132,7 @@ material Car/Plate_%(name)s
         </script></material>
       </visual>
       <visual name="plate">
-        <pose>{px:.4f} 0 {pz:.4f} 0 0 0</pose>
+        <pose>{px:.4f} {pcx:.4f} {pz:.4f} 0 0 0</pose>
         <geometry><box><size>{pt:.4f} {pw:.4f} {ph:.4f}</size></box></geometry>
         <material><script>
           <uri>model://{name}/materials/scripts</uri>
@@ -149,7 +158,7 @@ material Car/Plate_%(name)s
 </sdf>
 '''.format(name=name, plate=plate_text, bw=BOARD_W, bh=BOARD_H, bt=BOARD_T,
            pw=PLATE_W, ph=PLATE_H, pt=PLATE_T, hz=hz,
-           px=BOARD_T / 2.0 + PLATE_T / 2.0, pz=BASE_T + PLATE_CZ,
+           px=BOARD_T / 2.0 + PLATE_T / 2.0, pz=BASE_T + PLATE_CZ, pcx=PLATE_CX,
            bz=BASE_T / 2.0, bt2=BASE_T)
     open(os.path.join(d, 'model.sdf'), 'w').write(sdf)
     open(os.path.join(d, 'model.config'), 'w').write(
