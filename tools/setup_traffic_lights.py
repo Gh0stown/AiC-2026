@@ -141,8 +141,10 @@ def model_sdf(name, layout, posts='double'):
          % (hz, HOUSING_D, bw, bh)]
 
     # ---- 支架: 默认左右两根 (官方照片); single 则正中一根 ----
+    # 双支架摆在灯箱两端, 支架**外沿与灯箱端面齐平** -> 腿距 = 灯箱宽 - 支架宽
+    # (官方示意图上两个红点的间距实测 0.60~0.64 m, 正好等于灯箱宽 0.64 左右)
     posts_y = [0.0] if (single or layout == 'vertical') else \
-              [-(bw / 2 - POST_W), +(bw / 2 - POST_W)]
+              [-(bw / 2 - POST_W / 2.0), +(bw / 2 - POST_W / 2.0)]
     for i, py in enumerate(posts_y):
         o.append('      <visual name="post%d"><pose>0 %.3f %.3f 0 0 0</pose><geometry>'
                  '<box><size>%.3f %.3f %.3f</size></box></geometry><material>'
@@ -156,7 +158,7 @@ def model_sdf(name, layout, posts='double'):
                  % (i, py, HOUSING_Z / 2.0, POST_W, POST_W, HOUSING_Z))
         # 底脚 (向前后伸出的薄板, 像照片里的支架脚) —— 也要做碰撞体,
         # 否则支撑多边形在 x 方向只有支架的 2.5cm 宽, 容易前后倒
-        foot_x = 0.160 if not single else 0.130
+        foot_x = 0.140 if not single else 0.120
         foot_y = 0.050 if not single else 0.110
         o.append('      <visual name="foot%d"><pose>0 %.3f 0.006 0 0 0</pose><geometry>'
                  '<box><size>%.3f %.3f 0.012</size></box></geometry><material>'
