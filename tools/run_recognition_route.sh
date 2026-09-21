@@ -15,17 +15,21 @@
 #      tools/run_recognition_route.sh --keep       # 跑完不关仿真
 #      tools/run_recognition_route.sh --no-plot    # 不重画轨迹图
 #      tools/run_recognition_route.sh --route <yaml>
+#      tools/run_recognition_route.sh --capture           # 每个识别点拍照, 存 captures/<时间戳>/
+#      tools/run_recognition_route.sh --capture --frames 5
 # =============================================================================
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GUI=false; KEEP=false; PLOT=true
+GUI=false; KEEP=false; PLOT=true; CAPTURE=false; FRAMES=3
 ROUTE="$ROOT/src/competition_robot/config/recognition_route.yaml"
 while [ $# -gt 0 ]; do
   case "$1" in
     --gui)     GUI=true ;;
     --keep)    KEEP=true ;;
     --no-plot) PLOT=false ;;
+    --capture) CAPTURE=true ;;
+    --frames)  FRAMES="$2"; shift ;;
     --route)   ROUTE="$2"; shift ;;
     *) echo "未知参数: $1"; exit 2 ;;
   esac
@@ -123,6 +127,32 @@ if [ -z "$SIM_PID" ]; then
 fi
 echo "  等 AMCL 收敛 (12s)..."
 sleep 12
+
+if $CAPTURE; then
+  hdr "跑路线 + 每个识别点拍照"
+  echo "  输出: captures/<时间戳>/   (每个识别点 $FRAMES 帧)"
+  python3 "$ROOT/tools/capture_points.py" --route "$ROUTE" --frames "$FRAMES" \
+          2>&1 | tee "$LOGD/capture.log"
+  CAPDIR=$(ls -td "$ROOT"/captures/*/ 2>/dev/null | head -1)
+  hdr "结果"
+  if [ -n "$CAPDIR" ]; then
+    echo "  本次图片: ${CAPDIR#$ROOT/}"
+    echo "  索引    : ${CAPDIR#$ROOT/}index.csv"
+    ls "$CAPDIR" | head -20 | sed 's/^/    /'
+    if [ -f "$CAPDIR/index.csv" ]; then
+      echo "  ── index.csv ──"
+      column -s, -t < "$CAPDIR/index.csv" 2>/dev/null | cut -c1-150 | sed 's/^/    /' || cat "$CAPDIR/index.csv"
+    fi
+    if $PLOT; then
+      python3 "$ROOT/tools/show_captures.py" "$CAPDIR" >/dev/null 2>&1 \
+        && echo "  总览图  : ${CAPDIR#$ROOT/}overview.png"
+    fi
+    echo; echo "  拍照完成 ✅"
+    exit 0
+  fi
+  echo; echo "  没拍到图片 ❌  详见 $LOGD/capture.log"
+  exit 1
+fi
 
 hdr "跑最终路线 ($(basename "$ROUTE"))"
 echo "  每个识别点: 原地转向 -> 直线过去 -> 到点转到拍照朝向"

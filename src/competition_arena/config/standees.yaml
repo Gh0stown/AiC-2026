@@ -6,6 +6,7 @@
 # 摆放: 用 tools/setup_standees.py 按下面的 blocks 计划生成 <include>
 #   朝向: 模型板面朝 +x -> yaw 决定面向 (北=+y 90, 南=-y -90, 东=+x 0, 西=-x 180)
 
+inset_m: 0.2
 standees:
 - name: standee_c01
   model: standee_c01

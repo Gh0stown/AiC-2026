@@ -16,6 +16,16 @@
           </script>
         </material>
       </visual>
+      <!-- ★ 背面挡板: Gazebo 的 box 会把贴图糊到**六个面**上, 于是从背后看
+           也是(镜像的)人物图 —— 实物的模切立牌背面是纯色卡纸。不挡的话:
+             1) 视觉模型可能学到"正反两面都是人", 与真机域不一致 (sim2real 断裂);
+             2) 从背后拍到的图会被误判成"正视目标".
+           这里紧贴板背面加一块略大的纯色薄板, 从后面看就是纯色。 -->
+      <visual name="back">
+        <pose>-0.0020 0 0.0790 0 0 0</pose>
+        <geometry><box><size>0.0010 0.0562 0.1520</size></box></geometry>
+        <material><ambient>0.90 0.89 0.86 1</ambient><diffuse>0.90 0.89 0.86 1</diffuse></material>
+      </visual>
       <visual name="base">
         <pose>0 0 0.0020 0 0 0</pose>
         <geometry><box><size>0.0450 0.0542 0.0040</size></box></geometry>

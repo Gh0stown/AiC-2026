@@ -359,8 +359,11 @@ def load(path):
             x, y = px2x(w['pixel'][0]), px2y(w['pixel'][1])
         else:
             raise ValueError('第 %d 个航点既没有 world 也没有 pixel' % (i + 1))
-        wps.append(dict(name=w.get('name', 'P%d' % (i + 1)), x=x, y=y,
-                        yaw=w.get('yaw')))
+        # ★ 保留 yaml 里的其它字段 (task / shot 等) —— capture_points.py 要用它
+        #   判断"这个站要不要停车拍照"。以前只留 name/x/y/yaw, 下游拿不到。
+        d = dict(w)
+        d.update(name=w.get('name', 'P%d' % (i + 1)), x=x, y=y, yaw=w.get('yaw'))
+        wps.append(d)
     start = cfg.get('start')
     start_yaw = cfg.get('start_yaw')
     # 回程目标可以和出生点不同: 出生点若在角落, 原地转向的几何余量太小,

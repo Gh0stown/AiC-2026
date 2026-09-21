@@ -482,13 +482,17 @@ def evaluate(target, cx, cy, yaw, rob):
                 cosi=cosi_min, camx=camx, camy=camy)
 
 
-def feasible(cx, cy, yaw, rob, segments, props, blocks):
+def feasible(cx, cy, yaw, rob, segments, props, blocks, bound=None, rot=True):
+    """bound: 车体允许到达的 |x|,|y| 上界 (默认白线 2.075; 可以放宽到围墙 2.176)
+       rot:   是否要求满足原地转向余量"""
+    lim = FIELD_LINE if bound is None else bound
     ok = np.ones(len(cx), dtype=bool)
     C = rect_corners(cx, cy, yaw, rob['half_x'], rob['half_y'])
-    ok &= (np.abs(C[..., 0]) <= FIELD_LINE).all(1) & \
-          (np.abs(C[..., 1]) <= FIELD_LINE).all(1)
+    ok &= (np.abs(C[..., 0]) <= lim).all(1) & \
+          (np.abs(C[..., 1]) <= lim).all(1)
     # ①b 原地转向余量 (和 patrol.py 同一判据): 车心离墙 >= 车体外接圆半径
-    ok &= (np.maximum(np.abs(cx), np.abs(cy)) <= FIELD_LINE - ROT_R)
+    if rot:
+        ok &= (np.maximum(np.abs(cx), np.abs(cy)) <= lim - ROT_R)
     # ② 只能在路网走廊上 (街区之间没有实体墙, 穿街区=压线/撞人偶)
     ok &= in_road(rect_samples(cx, cy, yaw, rob['half_x'], rob['half_y']))
     if not ok.any():
@@ -532,7 +536,8 @@ def center_yaw(target, cx, cy, yaw, rob, iters=3):
     return yaw
 
 
-def search_face_on(target, rob, segments, props, blocks, topn=3):
+def search_face_on(target, rob, segments, props, blocks, topn=3,
+                   bound=None, rot=True):
     """**正对**该方向人偶的点位 (用户定的原则).
 
     相机光轴垂直于立牌板面: 车停在立牌正前方的法线上, 朝向 = 背对法线。
@@ -558,7 +563,8 @@ def search_face_on(target, rob, segments, props, blocks, topn=3):
     ry = camy - rob['mount'][0] * fwd[1]
     yaw = np.full(len(ds), yaw0)
 
-    ok = feasible(rx, ry, yaw, rob, segments, props, blocks)
+    ok = feasible(rx, ry, yaw, rob, segments, props, blocks,
+                  bound=bound, rot=rot)
     if not ok.any():
         return []
     frame = np.full(len(ds), 9.0)
@@ -567,7 +573,7 @@ def search_face_on(target, rob, segments, props, blocks, topn=3):
         for q in b['pts']:
             if abs(q[2] - ztop) > 1e-9:            # 只查上沿 (横向极值也在上沿角上)
                 continue
-            vx, vy = q[0] - rx, q[1] - ry
+            vx, vy = q[0] - camx, q[1] - camy
             depth = vx * fwd[0] + vy * fwd[1]
             lat = vx * perp[0] + vy * perp[1]
             vert = q[2] - rob['mount'][2]
@@ -580,6 +586,10 @@ def search_face_on(target, rob, segments, props, blocks, topn=3):
                 (hh - np.abs(vert)) / np.maximum(hh, 1e-9)))
             dmin = np.minimum(dmin, depth)
     vis = ztop - np.maximum(zbot, rob['mount'][2] - FRAME_MARGIN * rob['half_h_tan'] * dmin)
+    # 拍全身需要相机低头多少度 (给"要不要改相机安装"提供依据)
+    need_pitch = np.degrees(np.arctan2(rob['mount'][2] - zbot,
+                                       FRAME_MARGIN * dmin)) - \
+        np.degrees(np.arctan(rob['half_h_tan']))
     metric = target['geom'][0]['w'] * rob['fx'] / np.maximum(dmin, 1e-9)   # 正对: 不缩水
     ok &= (vis >= VIS_MIN) & (metric >= target['thr'])
     if not ok.any():
@@ -601,6 +611,10 @@ def search_face_on(target, rob, segments, props, blocks, topn=3):
                         metric=float(metric[i]), metric_h=float(vis[i] * rob['fx'] / max(dmin[i], 1e-9)),
                         dist=float(ds[i]), frame=float(frame[i]), cosi=1.0,
                         vis=float(vis[i]), lateral=float(ts[i]),
+                        need_pitch=float(need_pitch[i]),
+                        # 超出"原地转向余量"多少 -> 在这个点原地转向时, 车体一角会扫过
+                        # 白线; 但拍照姿态本身仍在白线内(不压线), 也不会碰围墙。
+                        over_rot=float(max(abs(rx[i]), abs(ry[i])) - (FIELD_LINE - ROT_R)),
                         score=float(ds[i])))
         if len(out) >= topn:
             break
@@ -777,6 +791,9 @@ def main():
     ap.add_argument('--standee-mode', choices=['face', 'oblique'], default='face',
                     help='人偶点位: face=正对该方向人偶(默认, 用户要求的原则); '
                          'oblique=斜视(能拍全但斜)')
+    ap.add_argument('--standee-reach', choices=['line', 'wall'], default='wall',
+                    help='正对时车能靠多近: line=守住白线(2.075, 立牌只剩上半身); '
+                         'wall=可越过白线顶到围墙前(2.156, 画面里立牌能看到更多) [默认 wall]')
     ap.add_argument('--refresh-lanes', action='store_true')
     ap.add_argument('--out-yaml',
                     default=os.path.join(ROBOT, 'config', 'recognition_points.yaml'))
@@ -812,7 +829,11 @@ def main():
     chosen, rows = {}, []
     for t in targets:
         if t['task'] == 'standee' and a.standee_mode == 'face':
-            cands = search_face_on(t, rob, segments, props, blocks, max(3, a.top))
+            # 相机 0.20m 无俯仰 -> 正对必然切脚; 允许越过白线顶到围墙前能多看一截。
+            # 越过白线多少会逐点报在 over_line 里 (是画线, 不是碰撞)。
+            reach = 2.156 if a.standee_reach == 'wall' else None
+            cands = search_face_on(t, rob, segments, props, blocks, max(3, a.top),
+                                   bound=reach, rot=False)
         else:
             cands = search_target(t, rob, segments, props, blocks, a.top)
         print('-' * 100)
@@ -824,8 +845,11 @@ def main():
             continue
         chosen[t['name']] = cands
         for i, c in enumerate(cands):
-            h = '' if t['task'] != 'standee' else '  可见高=%.0f px(%.0f%%)' % (
-                c['metric_h'], c.get('vis', 0) / 0.150 * 100)
+            h = ''
+            if t['task'] == 'standee':
+                h = '  可见高=%.0f px(%.0f%%)  转向掠过白线%+.0fmm  拍全身需低头%.0f°' % (
+                    c['metric_h'], c.get('vis', 0) / 0.150 * 100,
+                    c.get('over_rot', 0) * 1000, c.get('need_pitch', 0))
             print('   %s #%d 停 (%+.3f, %+.3f) 朝 %+7.1f°  %s=%6.1f%s  距离 %.3f m  '
                   '画面余量 %3.0f%%  正视度 %.2f  分 %.2f'
                   % ('★' if i == 0 else ' ', i + 1, c['x'], c['y'],
@@ -858,7 +882,9 @@ def main():
             lane=lane_name(c['x'], c['y'], segments),
             shot_distance_m=round(c['dist'], 3),
             metric=dict(unit=r['unit'], value=round(c['metric'], 1), threshold=r['thr'],
-                        height_px=round(c['metric_h'], 1) if r['task'] == 'standee' else None),
+                        height_px=round(c['metric_h'], 1) if r['task'] == 'standee' else None,
+                        visible_frac=round(c.get('vis', 0) / 0.150, 3) if r['task'] == 'standee' else None,
+                        need_pitch_deg=round(c.get('need_pitch', 0), 1) if r['task'] == 'standee' else None),
             view_incidence_cos=round(c['cosi'], 3),
             frame_margin=round(c['frame'], 3),
             alternatives=[[round(q['x'], 4), round(q['y'], 4), round(q['yaw'], 4),
@@ -943,12 +969,14 @@ def main():
                        min(c['metric'] for c in st), max(c['metric'] for c in st),
                        min(c['metric_h'] for c in st), max(c['metric_h'] for c in st)))
             f.write('  - 代价: 相机只有 **0.20 m 高且无俯仰**, 正对时最近只能站到 %.2f~%.2f m, '
-                    '**下沿必然被切**, 可见高度约占立牌的 %.0f%%~%.0f%%。\n'
+                    '**下沿必然被切**, 画面里只有立牌上部 %.0f%%~%.0f%% (头+上躯干)。\n'
                     % (min(c['dist'] for c in st), max(c['dist'] for c in st),
                        min(vis) / 0.150 * 100, max(vis) / 0.150 * 100))
-            f.write('  - 想拍全身需要 d >= %.2f m, 而车道只有 0.61 m 宽装不下 —— '
-                    '唯一办法是给相机加 10°~15° 俯仰或抬高 (会偏离实车参数, 需先确认实车相机姿态)。\n'
-                    % ((rob['mount'][2] - 0.004) / rob['half_h_tan']))
+            f.write('  - 实拍验证过: 拍全立牌需要 d >= %.2f m, 而车道只有 0.61 m 宽装不下 ——'
+                    '**唯一解法是给相机加约 %d° 俯仰**(或降低安装高度), 会偏离实车参数, '
+                    '需先确认实车相机能不能动。\n'
+                    % ((rob['mount'][2] - 0.004) / (FRAME_MARGIN * rob['half_h_tan']),
+                       round(max(c.get('need_pitch', 0) for c in st))))
         f.write('* **车道约束**: 点位是按"车体不出白线 + 不压车道线/停止线 + 不进街区 + '
                 '不碰道具"逐条筛出来的。街区在仿真里**没有实体墙**(只有地面画线), '
                 '所以必须显式禁行, 否则车会从街区中间穿过去。\n'

@@ -37,7 +37,16 @@ CFG = os.path.join(PKG, 'config', 'standees.yaml')
 BEGIN = '    <!-- ===== 人物立牌 (tools/setup_standees.py 生成) ===== -->'
 END = '    <!-- ===== 人物立牌结束 ===== -->'
 
-INSET = 0.032          # 从街区边线往内缩, 盖住立牌底座进深(0.045/2=0.0225)并留余量
+# ★ 立牌从街区边线往内缩多少 (m)。可以在 standees.yaml 的 block 里用 inset_m 覆盖。
+#
+#   为什么是 0.20 而不是 0.032: 识别是"开到点位正对着拍", 而相机只有 0.20 m 高、
+#   没有俯仰 —— 立牌 15 cm 高, 站得越近, 画面里被切掉的越多:
+#       拍摄距离 d  ->  可见高度 ≈ 0.366*d - 0.046  (占 15cm 的比例)
+#       d=0.28 m -> 38%   d=0.45 m -> 79%   d=0.55 m -> 100%
+#   而车道只有 0.61 m 宽, 车+相机最多只能离街区边线 ~0.28 m。所以把立牌往里挪
+#   0.20 m, 拍摄距离就从 0.28 涨到 ~0.47, 画面里能看到 ~85% (只切掉脚),
+#   而且需要的相机俯仰从 17° 降到 ~4° (基本不用改实车)。
+INSET = 0.20
 # ★ 同一方向的几个人偶**紧凑成一组**、居中摆在该边上。
 #   识别是"机器人开到固定点位、原地转向拍照", 一组人偶挤在一起才容易一张图拍全;
 #   沿整条边铺开的话, 离得远的那个要么出画、要么像素太小。
@@ -52,8 +61,12 @@ EDGE = {
 }
 
 
-def edge_points(rect, edge, n):
-    """在街区的某条边上取 n 个位置 (世界坐标 + yaw)。"""
+def edge_points(rect, edge, n, inset=None):
+    """在街区的某条边上取 n 个位置 (世界坐标 + yaw)。
+
+    inset: 从边线往内缩多少 (None -> 用模块默认 INSET)
+    """
+    INSET = globals()['INSET'] if inset is None else inset
     x0, y0, x1, y1 = rect
     yaw, along = EDGE[edge]
     if edge == 'north':
@@ -81,7 +94,11 @@ def edge_points(rect, edge, n):
 
 def load_plan():
     cfg = yaml.safe_load(open(CFG))
-    return cfg['standees'], cfg.get('blocks', [])
+    blocks = cfg.get('blocks', [])
+    top = float(cfg.get('inset_m', INSET))
+    for b in blocks:
+        b['inset'] = float(b.get('inset_m', top))
+    return cfg['standees'], blocks
 
 
 def build_includes(plan):
@@ -90,7 +107,7 @@ def build_includes(plan):
         rect = [float(v) for v in blk['rect']]
         for e in blk['edges']:
             people = e['people']
-            pts = edge_points(rect, e['edge'], len(people))
+            pts = edge_points(rect, e['edge'], len(people), blk.get('inset'))
             for i, (p, (x, y, yaw)) in enumerate(zip(people, pts), 1):
                 out.append('    <include>')
                 out.append('      <uri>model://%s</uri>' % p)
@@ -126,7 +143,8 @@ def main():
             print('  %s 街区  x[%.3f, %.3f] y[%.3f, %.3f]  (%.2f x %.2f m)'
                   % (blk['name'], x0, x1, y0, y1, x1 - x0, y1 - y0))
             for e in blk['edges']:
-                pts = edge_points([float(v) for v in blk['rect']], e['edge'], len(e['people']))
+                pts = edge_points([float(v) for v in blk['rect']], e['edge'],
+                                  len(e['people']), blk.get('inset'))
                 print('    %-6s 朝 %-5s x%d: %s' % (e['edge'], e['edge'], len(e['people']),
                       ', '.join('%s@(%+.2f,%+.2f)' % (p.replace('standee_', ''), x, y)
                                 for p, (x, y, _) in zip(e['people'], pts))))
@@ -165,7 +183,7 @@ def main():
         for blk in plan:
             rect = [float(v) for v in blk['rect']]
             for e in blk['edges']:
-                pts = edge_points(rect, e['edge'], len(e['people']))
+                pts = edge_points(rect, e['edge'], len(e['people']), blk.get('inset'))
                 for nm, (x, y, _) in zip(e['people'], pts):
                     for (ox, oy, ow, oh) in obstacles:
                         if abs(x - ox) < (ow / 2 + 0.05) and abs(y - oy) < (oh / 2 + 0.06):
@@ -174,6 +192,31 @@ def main():
                             hit += 1
         if hit == 0:
             print('  干涉检查: 10 个立牌都没压到红绿灯的脚 ✓')
+
+    # ★ 立牌之间别压在一起 (往里缩 0.20m 后, 同一街区的两组可能靠近)
+    placed = []
+    for blk in plan:
+        rect = [float(v) for v in blk['rect']]
+        for e in blk['edges']:
+            pts = edge_points(rect, e['edge'], len(e['people']), blk.get('inset'))
+            for nm, (x, y, _) in zip(e['people'], pts):
+                w = float(by_name.get(nm, {}).get('width_m', 0.05))
+                # 记下"哪一组", 同组内 0.09m 是设计间距, 不算干涉
+                placed.append((nm, x, y, w, '%s/%s' % (blk['name'], e['edge'])))
+    worst = None
+    for i in range(len(placed)):
+        for j in range(i + 1, len(placed)):
+            (n1, x1, y1, w1, g1), (n2, x2, y2, w2, g2) = placed[i], placed[j]
+            if g1 == g2:
+                continue
+            gap = ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** 0.5 - (w1 + w2) / 2.0
+            if worst is None or gap < worst[0]:
+                worst = (gap, n1, n2)
+    print('  缩进: ' + ', '.join('%s %.2fm' % (b['name'], b['inset']) for b in plan))
+    if worst:
+        print('  立牌跨组间距: 最近一对 %s / %s 净距 %.3f m %s'
+              % (worst[1].replace('standee_', ''), worst[2].replace('standee_', ''),
+                 worst[0], '✓' if worst[0] > 0.05 else '⚠ 太近!'))
 
     uniq = [p for b in plan for e in b['edges'] for p in e['people']]
     if len(uniq) != len(set(uniq)):

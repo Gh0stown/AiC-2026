@@ -149,6 +149,16 @@ material %s
           </script>
         </material>
       </visual>
+      <!-- ★ 背面挡板: Gazebo 的 box 会把贴图糊到**六个面**上, 于是从背后看
+           也是(镜像的)人物图 —— 实物的模切立牌背面是纯色卡纸。不挡的话:
+             1) 视觉模型可能学到"正反两面都是人", 与真机域不一致 (sim2real 断裂);
+             2) 从背后拍到的图会被误判成"正视目标".
+           这里紧贴板背面加一块略大的纯色薄板, 从后面看就是纯色。 -->
+      <visual name="back">
+        <pose>{xb:.4f} 0 {zb:.4f} 0 0 0</pose>
+        <geometry><box><size>0.0010 {wb:.4f} {hb:.4f}</size></box></geometry>
+        <material><ambient>0.90 0.89 0.86 1</ambient><diffuse>0.90 0.89 0.86 1</diffuse></material>
+      </visual>
       <visual name="base">
         <pose>0 0 {zbh:.4f} 0 0 0</pose>
         <geometry><box><size>{bx:.4f} {w:.4f} {bh:.4f}</size></box></geometry>
@@ -166,7 +176,10 @@ material %s
   </model>
 </sdf>
 '''.format(name=name, h=h, w=w, t=THICK, zb=z_board, mat=mat_name,
-           bx=BASE_X, bh=BASE_H, zbh=BASE_H / 2.0)
+           bx=BASE_X, bh=BASE_H, zbh=BASE_H / 2.0,
+           # 背面挡板: 贴板背面 (板厚 t, 面在 +-t/2), 往外让 0.5mm 防 z-fighting,
+           # 并比板略大 2mm, 保证从背后看完全遮住贴图
+           xb=-(THICK / 2.0 + 0.0005), wb=w + 0.002, hb=h + 0.002)
     with open(os.path.join(d, 'model.sdf'), 'w') as f:
         f.write(sdf)
     with open(os.path.join(d, 'model.config'), 'w') as f:
@@ -222,7 +235,13 @@ def main():
                     '# 摆放: 用 tools/setup_standees.py 按下面的 blocks 计划生成 <include>\n'
                     '#   朝向: 模型板面朝 +x -> yaw 决定面向 (北=+y 90, 南=-y -90, 东=+x 0, 西=-x 180)\n\n'
                     % h)
-            yaml.safe_dump({'standees': manifest, 'blocks': BLOCKS}, f, allow_unicode=True,
+            # ★ inset_m: 立牌从街区边线往内缩多少。改成 0.20 (原来 0.032) 的原因:
+            #   识别是"开到点位正对着拍", 相机只有 0.20m 高且无俯仰, 站得越近切得越多:
+            #   拍摄距离 d -> 可见高度 ≈ 0.366*d - 0.046。往里挪 0.20m 后 d 从
+            #   0.28m 涨到 ~0.44m, 可见比例 38% -> 75%, 需要的俯仰 17° -> 5°。
+            #   (工具: setup_standees.py 读它; 计算见 gen_recognition_points.py)
+            yaml.safe_dump({'inset_m': 0.20, 'standees': manifest, 'blocks': BLOCKS},
+                           f, allow_unicode=True,
                            default_flow_style=False, sort_keys=False)
         print()
         print('  已生成 %d 个模型 -> src/competition_arena/models/standee_*/' % len(items))
