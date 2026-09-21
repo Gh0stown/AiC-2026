@@ -7,7 +7,9 @@
         导航用的静态地图其实可以直接由几何生成 —— 边界准确、墙薄、坐标系就是世界系。
 
 场地真值 (来自 worlds/competition_arena.world, 由 build_arena.py 生成):
-    内沿 +-2.076 m, 墙厚 24 mm, 墙高 0.5 m, 4.2 x 4.2 m
+    白线内沿 +-2.076 m, 围墙外移到白线外 0.10m -> **墙内沿 +-2.176 m**,
+    墙厚 24 mm, 墙高 0.30 m, 白线场地 4.2 x 4.2 m (地板 4.4 x 4.4)
+    (围墙外移的原因见 src/competition_arena/docs/traffic_light_model.md)
 
 用法:
     python3 tools/gen_map_from_arena.py                     # -> maps/arena_clean.pgm/.yaml
@@ -58,7 +60,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--out', default=os.path.join(WS, 'maps', 'arena_clean'))
     ap.add_argument('--resolution', type=float, default=0.025, help='m/格 (默认 2.5 cm, 边界更准)')
-    ap.add_argument('--inner', type=float, default=2.076, help='场地内沿 (m)')
+    ap.add_argument('--inner', type=float, default=2.176,
+                    help='围墙内沿 (m)。注意不是白线 2.076 —— build_arena.py '
+                         '默认 --margin 0.10 把围墙退到了白线外')
     ap.add_argument('--margin', type=float, default=0.30, help='地图比场地外扩多少 (m)')
     ap.add_argument('--obstacles', default=None, help='场地内部障碍 yaml: [[x0,y0,x1,y1],...]')
     ap.add_argument('--no-install', action='store_true', help='不往包里也拷一份')

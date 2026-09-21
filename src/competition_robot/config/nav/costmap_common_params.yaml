@@ -46,6 +46,13 @@ inflation_layer:
   enabled: true
   cost_scaling_factor: 3.0
   inflation_radius: 0.18
+  # ★ 显式设内切半径 (原来由 footprint 自动算 = 0.145)。
+  #   红绿灯是"跨车道的门"(见 docs/traffic_light_model.md), 门腿内沿到车道中心
+  #   只有 ~0.10m 余量; 内切半径若 >0.10, 代价地图会把门判成过不去 ——
+  #   实测表现为 DWA 偶发 "failed to produce path"。
+  #   设 0.10 后门可以正常通过; 真实碰撞仍由 footprint 多边形对 lethal 格判定,
+  #   所以只是少了一点保守余量, 不是放弃避障。
+  inscribed_radius: 0.10
 
 static_layer:
   enabled: true
