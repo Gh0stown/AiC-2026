@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="standee_c07">
+    <!-- 人偶立牌: 高 0.150 m x 宽 0.058 m x 厚 0.003 m
+         尺寸来源: ~/复赛资料/人员/ (用户确认 15x5 cm) -->
+    <static>true</static>
+    <link name="link">
+      <visual name="board">
+        <pose>0 0 0.0790 0 0 0</pose>
+        <geometry><box><size>0.0030 0.0579 0.1500</size></box></geometry>
+        <material>
+          <script>
+            <uri>model://standee_c07/materials/scripts</uri>
+            <uri>model://standee_c07/materials/textures</uri>
+            <name>Standee/c07</name>
+          </script>
+        </material>
+      </visual>
+      <visual name="base">
+        <pose>0 0 0.0020 0 0 0</pose>
+        <geometry><box><size>0.0450 0.0579 0.0040</size></box></geometry>
+        <material><ambient>0.92 0.92 0.92 1</ambient><diffuse>0.92 0.92 0.92 1</diffuse></material>
+      </visual>
+      <collision name="col">
+        <pose>0 0 0.0790 0 0 0</pose>
+        <geometry><box><size>0.0030 0.0579 0.1500</size></box></geometry>
+      </collision>
+      <collision name="base_c">
+        <pose>0 0 0.0020 0 0 0</pose>
+        <geometry><box><size>0.0450 0.0579 0.0040</size></box></geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>

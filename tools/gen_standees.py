@@ -1,0 +1,210 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""从官方人员 PNG 生成人偶立牌模型。
+
+素材: ~/复赛资料/人员/
+    社区人员/1..16.png      —— 社区人员 (农民/白领/厨师/外卖员/医生/建筑工 ...)
+    非社区人员/F1.png F2.png —— 非社区人员 (可疑人物)
+    人偶长宽.jpg            —— 实物照(带卷尺), 用于核对尺寸
+
+尺寸 (用户确认 + 照片核对):
+    高 15 cm, 宽约 5 cm —— 宽度按各图自身长宽比算 (PNG 长宽比约 0.34 -> 5.1cm)
+    厚度 3 mm (实物是薄的模切立牌)
+
+做法:
+    * 每张图先按 alpha 裁掉空白边, 保证"高 15cm"量的是人物本体
+    * 每个立牌一个模型目录, 自带 materials/(PNG + OGRE 材质脚本), 自包含
+    * 材质用 **alpha_rejection** 把透明区直接裁掉 —— 比 alpha 混合干净,
+      不会有半透明排序问题, 立牌边缘就是人物轮廓
+    * 模型设 <static>true</static>: 立牌是不会动的道具, 静态模型既不会倒、
+      也不会被碰到乱飞 (红绿灯是因为要动关节才不能用 static, 立牌没这需求)
+
+用法:
+    python3 tools/gen_standees.py              # 生成全部立牌模型
+    python3 tools/gen_standees.py --list       # 只打印清单和尺寸
+生成后模型在 src/competition_arena/models/standee_*/ , world 里**暂不摆放**。
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import shutil
+import sys
+
+import yaml
+from PIL import Image
+
+WS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PKG = os.path.join(WS, 'src', 'competition_arena')
+SRC = os.path.expanduser('~/复赛资料/人员')
+CFG = os.path.join(PKG, 'config', 'standees.yaml')
+
+STANDEE_H = 0.150      # 立牌高 15 cm
+THICK = 0.003          # 厚 3 mm
+BASE_H = 0.004         # 底座厚 4 mm (实物立牌下面有个折起来的支撑)
+BASE_X = 0.045         # 底座前后伸出 (防止前后倒)
+
+
+def collect():
+    """扫描素材目录, 返回 [(模型名, 源文件, 类别, 原图名)]"""
+    out = []
+    for i in range(1, 17):
+        p = os.path.join(SRC, '社区人员', '%d.png' % i)
+        if os.path.isfile(p):
+            out.append(('standee_c%02d' % i, p, 'community', '%d.png' % i))
+    for tag in ('F1', 'F2'):
+        p = os.path.join(SRC, '非社区人员', '%s.png' % tag)
+        if os.path.isfile(p):
+            out.append(('standee_%s' % tag, p, 'non_community', '%s.png' % tag))
+    return out
+
+
+def trim(im):
+    """按 alpha 裁掉四周空白, 返回 (裁剪后图, 宽, 高)"""
+    im = im.convert('RGBA')
+    bbox = im.split()[-1].getbbox()
+    if bbox:
+        im = im.crop(bbox)
+    return im, im.size[0], im.size[1]
+
+
+def write_model(name, src_png, size_m, mat_name):
+    w, h = size_m
+    d = os.path.join(PKG, 'models', name)
+    tex_d = os.path.join(d, 'materials', 'textures')
+    scr_d = os.path.join(d, 'materials', 'scripts')
+    os.makedirs(tex_d, exist_ok=True)
+    os.makedirs(scr_d, exist_ok=True)
+
+    shutil.copyfile(src_png, os.path.join(tex_d, '%s.png' % name))
+
+    # OGRE 材质: alpha_rejection 直接把透明像素丢掉, 立牌边缘就是人物轮廓
+    with open(os.path.join(scr_d, 'standee.material'), 'w') as f:
+        f.write('''// 自动生成 (tools/gen_standees.py) —— 人物立牌
+material %s
+{
+  technique
+  {
+    pass
+    {
+      ambient 1 1 1 1
+      diffuse 1 1 1 1
+      specular 0 0 0 0 0
+      alpha_rejection greater_equal 128
+      texture_unit
+      {
+        texture %s.png
+        filtering anisotropic
+        max_anisotropy 8
+      }
+    }
+  }
+}
+''' % (mat_name, name))
+
+    # 模型原点在**地面**, 水平居中; 板面朝 +x
+    z_board = BASE_H + h / 2.0
+    sdf = '''<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="{name}">
+    <!-- 人偶立牌: 高 {h:.3f} m x 宽 {w:.3f} m x 厚 {t:.3f} m
+         尺寸来源: ~/复赛资料/人员/ (用户确认 15x5 cm) -->
+    <static>true</static>
+    <link name="link">
+      <visual name="board">
+        <pose>0 0 {zb:.4f} 0 0 0</pose>
+        <geometry><box><size>{t:.4f} {w:.4f} {h:.4f}</size></box></geometry>
+        <material>
+          <script>
+            <uri>model://{name}/materials/scripts</uri>
+            <uri>model://{name}/materials/textures</uri>
+            <name>{mat}</name>
+          </script>
+        </material>
+      </visual>
+      <visual name="base">
+        <pose>0 0 {zbh:.4f} 0 0 0</pose>
+        <geometry><box><size>{bx:.4f} {w:.4f} {bh:.4f}</size></box></geometry>
+        <material><ambient>0.92 0.92 0.92 1</ambient><diffuse>0.92 0.92 0.92 1</diffuse></material>
+      </visual>
+      <collision name="col">
+        <pose>0 0 {zb:.4f} 0 0 0</pose>
+        <geometry><box><size>{t:.4f} {w:.4f} {h:.4f}</size></box></geometry>
+      </collision>
+      <collision name="base_c">
+        <pose>0 0 {zbh:.4f} 0 0 0</pose>
+        <geometry><box><size>{bx:.4f} {w:.4f} {bh:.4f}</size></box></geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>
+'''.format(name=name, h=h, w=w, t=THICK, zb=z_board, mat=mat_name,
+           bx=BASE_X, bh=BASE_H, zbh=BASE_H / 2.0)
+    with open(os.path.join(d, 'model.sdf'), 'w') as f:
+        f.write(sdf)
+    with open(os.path.join(d, 'model.config'), 'w') as f:
+        f.write('<?xml version="1.0"?>\n<model>\n  <name>%s</name>\n  <version>1.0</version>\n'
+                '  <sdf version="1.7">model.sdf</sdf>\n'
+                '  <description>人偶立牌 (官方素材, 高 15cm)</description>\n</model>\n' % name)
+    return d
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--height', type=float, default=STANDEE_H, help='立牌高 (m), 默认 0.15')
+    ap.add_argument('--list', action='store_true', help='只打印清单')
+    a = ap.parse_args()
+
+    if not os.path.isdir(SRC):
+        sys.exit('找不到官方素材: %s' % SRC)
+
+    items = collect()
+    print('官方人员素材: %d 个立牌 (社区 %d, 非社区 %d)'
+          % (len(items), sum(1 for x in items if x[2] == 'community'),
+             sum(1 for x in items if x[2] == 'non_community')))
+    print()
+    print('%-14s %-10s %-16s %-12s %s' % ('模型名', '类别', '原图', '原图像素', '立牌尺寸 (宽x高 m)'))
+    print('-' * 78)
+
+    manifest = []
+    for name, src, cat, orig in items:
+        im = Image.open(src)
+        trimmed, pw, ph = trim(im)
+        h = a.height
+        w = h * pw / float(ph)
+        mat = 'Standee/%s' % name.replace('standee_', '')
+        print('%-14s %-10s %-16s %-12s %.3f x %.3f'
+              % (name, '社区' if cat == 'community' else '非社区', orig,
+                 '%dx%d' % (pw, ph), w, h))
+        if not a.list:
+            tmp = os.path.join('/tmp', '%s.png' % name)
+            trimmed.save(tmp)
+            write_model(name, tmp, (w, h), mat)
+            os.remove(tmp)
+        manifest.append(dict(name=name, model=name, category=cat,
+                             source=orig, width_m=round(w, 4), height_m=h,
+                             material=mat))
+
+    if not a.list:
+        with open(CFG, 'w') as f:
+            f.write('# 人偶立牌清单 (唯一真值源) —— 由 tools/gen_standees.py 生成\n'
+                    '#\n'
+                    '# 素材: ~/复赛资料/人员/  (社区人员 1~16, 非社区人员 F1/F2)\n'
+                    '# 尺寸: 高 %.3f m, 宽按各图长宽比 (用户确认实物 15x5 cm)\n'
+                    '#\n'
+                    '# ★ 目前**只生成模型, 不摆进 world** (用户要求先不摆放)。\n'
+                    '#   要摆放时往 world 里加:\n'
+                    '#     <include><uri>model://standee_c01</uri><name>p_a1</name>\n'
+                    '#       <pose>x y 0 0 0 yaw</pose></include>\n'
+                    '#   朝向: 模型板面朝 +x, 所以 yaw 决定人偶面向哪边。\n\n'
+                    % h)
+            yaml.safe_dump({'standees': manifest}, f, allow_unicode=True,
+                           default_flow_style=False, sort_keys=False)
+        print()
+        print('  已生成 %d 个模型 -> src/competition_arena/models/standee_*/' % len(items))
+        print('  清单 -> %s' % os.path.relpath(CFG, WS))
+        print('  (按用户要求, **不摆进 world**)')
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,20 @@
+// 自动生成 (tools/gen_standees.py) —— 人物立牌
+material Standee/c15
+{
+  technique
+  {
+    pass
+    {
+      ambient 1 1 1 1
+      diffuse 1 1 1 1
+      specular 0 0 0 0 0
+      alpha_rejection greater_equal 128
+      texture_unit
+      {
+        texture standee_c15.png
+        filtering anisotropic
+        max_anisotropy 8
+      }
+    }
+  }
+}
