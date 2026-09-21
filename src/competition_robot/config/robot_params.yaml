@@ -188,7 +188,14 @@ sensors:
     width: 1280
     height: 960
     horizontal_fov_deg: 58.0              # Astra Pro 深度视场角 58°H x 45.5°V
-    range: [0.60, 8.0]                    # Astra Pro 深度范围 0.6~8 m
+    range: [0.60, 8.0]                    # Astra Pro **深度**范围 0.6~8 m (深度图用)
+    # ★ 裁剪面必须和"深度测距范围"分开! (2026-09-21 踩坑)
+    #   原来直接把 range 当成 RGB 相机的 clip near/far -> near=0.6m,
+    #   于是**比 0.6m 近的东西根本不渲染**: 正对着拍立牌的点位算出来是 0.42~0.60m,
+    #   画面里就只剩后面那组的背面 (排查了很久才定位到 clip)。
+    #   RGB 相机本身可以看得很近; 实机能否对焦到 0.4m 以内要看镜头, 见复赛要求的 R2。
+    clip_near: 0.05
+    clip_far:  20.0
     mass: 0.17                            # [实车规格] Astra Pro 官方 165 g
     update_rate: 15.0                     # 实机 30fps, 仿真降到 15 省算力
     topic: camera

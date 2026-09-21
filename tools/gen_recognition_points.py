@@ -65,6 +65,10 @@ PROP_MARGIN = 0.02       # 道具碰撞余量
 FRAME_MARGIN = 0.88      # 目标点须落在半视场的这个比例内 (硬约束)
 FRAME_MIN = 0.10         # 还要求画面留出 >=10% 余量 (抗定位误差)
 D_MIN, D_MAX = 0.30, 4.00
+# ★ 相机近裁剪面 (robot_params.yaml 的 sensors.camera.clip_near)。
+#   比它近的东西**根本不渲染**。2026-09-21 的坑: 这一项原来错用了深度相机的
+#   测距下限 0.6m, 于是所有 0.42~0.60m 的正对点位拍到的都是"后面那组的背面"。
+CLIP_NEAR = 0.05
 # 搜索网格: 以目标为中心撒一圈候选相机位姿.
 # ★ 别调粗: 人偶组受"相机 0.20m 无俯仰"限制, 可行域很窄 (A_west 在 2°/4cm 网格下
 #   会被整个漏掉 -> 误报"无可行解"); 1°/2cm 才够稳。
@@ -821,10 +825,13 @@ def main():
     print('车道线 %d 段 (停止线 %d)   禁行街区 %d 个 (%s)'
           % (len(segments), sum(1 for s in segments if s['type'] == 'stop'),
              len(blocks), '/'.join(b[0] for b in blocks)))
-    print('目标 %d 个 (灯 %d / 人偶组 %d / 车牌 %d)   正面约束 cos>=%.2f'
-          % (len(targets), sum(1 for t in targets if t['task'] == 'traffic_light'),
+    print('相机近裁剪面 %.2f m (比它近的不渲染)   目标 %d 个 (灯 %d / 人偶组 %d / 车牌 %d)'
+          % (CLIP_NEAR, len(targets),
+             sum(1 for t in targets if t['task'] == 'traffic_light'),
              sum(1 for t in targets if t['task'] == 'standee'),
-             sum(1 for t in targets if t['task'] == 'plate'), COS_MIN))
+             sum(1 for t in targets if t['task'] == 'plate')))
+    print('正面约束 cos>=%.2f'
+          % (COS_MIN,))
 
     chosen, rows = {}, []
     for t in targets:
@@ -881,6 +888,7 @@ def main():
             yaw_deg=round(math.degrees(c['yaw']), 1),
             lane=lane_name(c['x'], c['y'], segments),
             shot_distance_m=round(c['dist'], 3),
+            clip_near_m=CLIP_NEAR,
             metric=dict(unit=r['unit'], value=round(c['metric'], 1), threshold=r['thr'],
                         height_px=round(c['metric_h'], 1) if r['task'] == 'standee' else None,
                         visible_frac=round(c.get('vis', 0) / 0.150, 3) if r['task'] == 'standee' else None,

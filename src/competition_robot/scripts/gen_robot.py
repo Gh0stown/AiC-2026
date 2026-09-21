@@ -450,8 +450,10 @@ def build(params):
         out.append('        <horizontal_fov>%s</horizontal_fov>\n' % f(hfov))
         out.append('        <image><width>%d</width><height>%d</height>'
                    '<format>R8G8B8</format></image>\n' % (cam['width'], cam['height']))
+        # ★ 用 clip_near/clip_far, **不要**用 range (那是深度测距范围):
+        #   用 range 会让近处 0.6m 内的东西完全不渲染 (2026-09-21 踩过)
         out.append('        <clip><near>%s</near><far>%s</far></clip>\n'
-                   % (f(cam['range'][0]), f(cam['range'][1])))
+                   % (f(cam.get('clip_near', 0.05)), f(cam.get('clip_far', 20.0))))
         out.append('      </camera>\n')
         if pub_depth:
             out.append('      <plugin name="depth_camera_plugin" '
