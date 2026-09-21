@@ -1,0 +1,147 @@
+# 最终巡检路线 (唯一真值源) —— 由 tools/gen_recognition_route.py 生成
+# 顺序 = 沿巡检环线的弧长; recog 点带 yaw = 到点后原地转向拍照的朝向
+# 跑法: python3 tools/patrol.py --file src/competition_robot/config/recognition_route.yaml
+note: 最终巡检路线 = 原巡检环线 + 沿途识别点; 由 tools/gen_recognition_route.py 生成
+usage: python3 tools/patrol.py --file src/competition_robot/config/recognition_route.yaml
+start:
+- 1.772
+- 1.782
+return_to:
+- 1.772
+- 1.782
+waypoints:
+- name: 01_tl_top
+  world:
+  - 0.6431
+  - 1.779
+  yaw: -3.1412
+  task: traffic_light
+  shot:
+    metric: 灯珠直径 px
+    value: 101.0
+    threshold: 25.0
+- name: 02_A_north
+  world:
+  - -0.962
+  - 1.8101
+  yaw: -1.5708
+  task: standee
+  shot:
+    metric: 立牌宽 px
+    value: 204.8
+    threshold: 40.0
+- name: 03_top_l
+  world:
+  - -1.739
+  - 1.702
+  task: waypoint
+- name: 04_A_west
+  world:
+  - -1.8141
+  - 1.1575
+  yaw: 0.0
+  task: standee
+  shot:
+    metric: 立牌宽 px
+    value: 147.5
+    threshold: 40.0
+- name: 05_mid_l
+  world:
+  - -1.726
+  - 0.483
+  task: waypoint
+- name: 06_A_south
+  world:
+  - -0.962
+  - 0.4649
+  yaw: 1.5708
+  task: standee
+  shot:
+    metric: 立牌宽 px
+    value: 196.4
+    threshold: 40.0
+- name: 07_B_north
+  world:
+  - -0.941
+  - 0.5991
+  yaw: -1.5708
+  task: standee
+  shot:
+    metric: 立牌宽 px
+    value: 122.8
+    threshold: 40.0
+- name: 08_mid_cl
+  world:
+  - -0.877
+  - 0.476
+  task: waypoint
+- name: 09_mid_c
+  world:
+  - -0.046
+  - 0.479
+  task: waypoint
+- name: 10_tl_bot
+  world:
+  - -0.11
+  - -0.1309
+  yaw: -1.5704
+  task: traffic_light
+  shot:
+    metric: 灯珠直径 px
+    value: 101.0
+    threshold: 25.0
+- name: 11_B_east
+  world:
+  - -0.0399
+  - -0.17
+  yaw: -3.1416
+  task: standee
+  shot:
+    metric: 立牌宽 px
+    value: 160.6
+    threshold: 40.0
+- name: 12_bot_c
+  world:
+  - -0.108
+  - -1.739
+  task: waypoint
+- name: 13_car_3
+  world:
+  - 1.2014
+  - -1.762
+  yaw: 0.0006
+  task: plate
+  shot:
+    metric: 车牌宽 px
+    value: 156.7
+    threshold: 140.0
+- name: 14_bot_r
+  world:
+  - 1.224
+  - -1.75
+  task: waypoint
+- name: 15_car_2
+  world:
+  - 1.2014
+  - -1.1245
+  yaw: 0.0006
+  task: plate
+  shot:
+    metric: 车牌宽 px
+    value: 156.7
+    threshold: 140.0
+- name: 16_car_1
+  world:
+  - 1.2014
+  - -0.501
+  yaw: 0.0006
+  task: plate
+  shot:
+    metric: 车牌宽 px
+    value: 156.7
+    threshold: 140.0
+- name: 17_ring
+  world:
+  - 1.128
+  - 1.698
+  task: waypoint

@@ -129,7 +129,7 @@ rostopic pub -r 10 /cmd_vel geometry_msgs/Twist "{linear: {x: 0.3}, angular: {z:
 | `/cmd_vel` | `geometry_msgs/Twist` | — | 速度指令 |
 | `/odom` | `nav_msgs/Odometry` | 50 Hz | 轮式里程计（`encoder` 模式，会漂移） |
 | `/scan` | `sensor_msgs/LaserScan` | 15 Hz | 360° 2D 激光，0.10–8.0 m，720 点 |
-| `/camera/image_raw` | `sensor_msgs/Image` | 20 Hz | 640×480 RGB |
+| `/camera/rgb/image_raw` | `sensor_msgs/Image` | 15 Hz | 1280×960 RGB（2026-09-21 从 640×480 提到 1280×960，为车牌 OCR） |
 | `/imu` | `sensor_msgs/Imu` | 100 Hz | |
 | `/joint_states` | `sensor_msgs/JointState` | 30 Hz | 左右轮 |
 
@@ -423,6 +423,41 @@ opencv-python `4.10.0` / numpy `1.24.4` / hyperlpr3 `0.1.3` / onnxruntime `1.19.
 但**识别网络对紧裁剪的车牌完美工作**（自检 3/3，置信度 0.993–0.997）。
 所以 `tools/plate_ocr.py` 只加载识别网络，正好配合
 「YOLO 框车牌 → 裁剪 → OCR」的流程。
+
+分辨率下界也测过：把官方车牌重采样到 **70 px 宽**（每字形 8.75 px）再喂识别网络，
+仍然 **3/3 全对**（含 1.2 px 模糊）。所以车牌任务的瓶颈在"把车牌框出来"，不在识别。
+
+### 识别点位与拍照距离（可直接复算）
+
+```bash
+python3 tools/gen_recognition_points.py        # 约 5 秒, 不需要起仿真
+.venv/bin/python tools/check_ocr_resolution.py # 车牌 OCR 分辨率下界
+```
+
+它把"车该停在哪个点、朝哪、目标占多少像素"从真值源**算出来**（不手填）：
+道具位姿来自 world、尺寸来自各 config、相机模型来自 `robot_params.yaml`、
+车道线/停止线从官方平面图程序提取（`config/lane_lines.json`）。
+产出 `config/recognition_points.yaml` + `docs/recognition_points.md` +
+俯视核对图 `docs/recognition_points.png`。
+
+复算结果（2026-09-21）：红绿灯停在**停止线内侧 0.10~0.16 m**、灯珠 **101 px**；
+车牌在"不压车道线"前提下最近 0.70 m、**157 px 宽**；
+两个街区的人偶**每个方向一个"正对"点位**（相机光轴垂直于立牌板面，正视度 1.00），
+画面里立牌宽 123~205 px —— 但相机只有 0.20 m 高且无俯仰，正对时下沿必然被切，
+可见高度约 60%~75%。
+
+### 最终巡检路线（航点 + 沿途识别点）
+
+```bash
+python3 tools/gen_recognition_route.py     # 把识别点按弧长插进巡检环线 -> 17 站
+./tools/run_recognition_route.sh           # 一键: 起仿真 -> 跑整条 -> 存轨迹 -> 重画图
+```
+
+路线 = 原来那条巡检环线 + 沿途 10 个识别点（10 个点离环线都只有 0.01~0.12 m），
+共 17 站。每个识别点的动作就是"**原地转向 → 直线过去 → 到点原地转到拍照朝向**"，
+正是比赛要求的"开到固定点位原地转向拍照"。实测（无头仿真）**17/17 到点、0 失败**，
+AMCL 到点误差均值 0.056 m、原地转向残余 ≤1.0°、一圈 166 s。
+路线图 `docs/recognition_route.png`（红=实测轨迹，橙=规划环线，数字=顺序）。
 
 ### 换到显卡机
 

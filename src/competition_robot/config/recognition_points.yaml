@@ -1,0 +1,262 @@
+# 视觉识别点位 (唯一真值源) —— 由 tools/gen_recognition_points.py 计算
+# 坐标: 场地世界系 (= map 系), m / rad; 重算: python3 tools/gen_recognition_points.py
+note: 视觉识别点位 (唯一真值源) —— 由 tools/gen_recognition_points.py 计算
+usage: 把车开到 pose 的 (x,y), 原地转到 yaw, 拍照
+camera:
+  width: 1280
+  height: 960
+  hfov_deg: 58.0
+  vfov_deg: 45.1
+  fx_px: 1154.6
+  height_m: 0.2
+  pitch_deg: 0.0
+constraints:
+  field_line: 2.075
+  no_cross_lane_lines: true
+  no_prop_collision: true
+  frame_margin: 0.88
+points:
+- name: tl_top
+  task: traffic_light
+  pose:
+  - 0.6431
+  - 1.779
+  - -3.1412
+  yaw_deg: -180.0
+  lane: 中部街区列 / 顶车道
+  shot_distance_m: 1.0
+  metric:
+    unit: 灯珠直径 px
+    value: 101.0
+    threshold: 25.0
+    height_px: null
+  view_incidence_cos: 0.974
+  frame_margin: 0.298
+  alternatives:
+  - - 0.8556
+    - 1.6359
+    - 3.0407
+    - 81.1
+  - - 1.0429
+    - 1.806
+    - -3.1242
+    - 71.7
+  - - -0.0368
+    - 0.5568
+    - 1.9673
+    - 72.6
+  - - 1.1073
+    - 1.5523
+    - 3.0048
+    - 66.6
+  stop_line_gap_m: 0.1
+- name: tl_bot
+  task: traffic_light
+  pose:
+  - -0.11
+  - -0.1309
+  - -1.5704
+  yaw_deg: -90.0
+  lane: 竖车道 / B 街区带
+  shot_distance_m: 1.0
+  metric:
+    unit: 灯珠直径 px
+    value: 101.0
+    threshold: 25.0
+    height_px: null
+  view_incidence_cos: 0.974
+  frame_margin: 0.298
+  alternatives:
+  - - -0.0131
+    - 0.1058
+    - -1.6381
+    - 80.3
+  - - -0.2415
+    - 0.2234
+    - -1.4853
+    - 73.0
+  - - 1.1122
+    - -0.8108
+    - -2.7451
+    - 72.6
+  - - 1.115
+    - -0.5439
+    - -2.5722
+    - 67.7
+  stop_line_gap_m: 0.164
+- name: A_north
+  task: standee
+  pose:
+  - -0.962
+  - 1.8101
+  - -1.5708
+  yaw_deg: -90.0
+  lane: A/B 街区列 / 顶车道
+  shot_distance_m: 0.225
+  metric:
+    unit: 立牌宽 px
+    value: 204.8
+    threshold: 40.0
+    height_px: 279.9
+  view_incidence_cos: 1.0
+  frame_margin: 0.622
+  alternatives:
+  - - -0.862
+    - 1.8151
+    - -1.5708
+    - 202.1
+  - - -1.062
+    - 1.8151
+    - -1.5708
+    - 202.1
+- name: A_south
+  task: standee
+  pose:
+  - -0.962
+  - 0.4649
+  - 1.5708
+  yaw_deg: 90.0
+  lane: A/B 街区列 / 中车道
+  shot_distance_m: 0.265
+  metric:
+    unit: 立牌宽 px
+    value: 196.4
+    threshold: 40.0
+    height_px: 293.7
+  view_incidence_cos: 1.0
+  frame_margin: 0.65
+  alternatives:
+  - - -1.062
+    - 0.4649
+    - 1.5708
+    - 196.4
+  - - -0.862
+    - 0.4599
+    - 1.5708
+    - 194.1
+- name: A_west
+  task: standee
+  pose:
+  - -1.8141
+  - 1.1575
+  - 0.0
+  yaw_deg: 0.0
+  lane: 左车道 / A 街区带
+  shot_distance_m: 0.225
+  metric:
+    unit: 立牌宽 px
+    value: 147.5
+    threshold: 40.0
+    height_px: 279.9
+  view_incidence_cos: 1.0
+  frame_margin: 0.662
+  alternatives:
+  - - -1.8091
+    - 1.2575
+    - 0.0
+    - 149.5
+  - - -1.8141
+    - 1.0575
+    - 0.0
+    - 147.5
+- name: B_east
+  task: standee
+  pose:
+  - -0.0399
+  - -0.17
+  - -3.1416
+  yaw_deg: -180.0
+  lane: 竖车道 / B 街区带
+  shot_distance_m: 0.25
+  metric:
+    unit: 立牌宽 px
+    value: 160.6
+    threshold: 40.0
+    height_px: 288.9
+  view_incidence_cos: 1.0
+  frame_margin: 0.65
+  alternatives:
+  - - -0.0449
+    - -0.27
+    - -3.1416
+    - 162.6
+  - - -0.0449
+    - -0.07
+    - -3.1416
+    - 162.6
+- name: B_north
+  task: standee
+  pose:
+  - -0.941
+  - 0.5991
+  - -1.5708
+  yaw_deg: -90.0
+  lane: A/B 街区列 / 中车道
+  shot_distance_m: 0.285
+  metric:
+    unit: 立牌宽 px
+    value: 122.8
+    threshold: 40.0
+    height_px: 299.7
+  view_incidence_cos: 1.0
+  frame_margin: 0.692
+  alternatives:
+  - - -0.841
+    - 0.6041
+    - -1.5708
+    - 121.4
+  - - -1.041
+    - 0.5991
+    - -1.5708
+    - 122.8
+- name: car_1
+  task: plate
+  pose:
+  - 1.2014
+  - -0.501
+  - 0.0006
+  yaw_deg: 0.0
+  lane: 东竖车道 / B 街区带
+  shot_distance_m: 0.7
+  metric:
+    unit: 车牌宽 px
+    value: 156.7
+    threshold: 140.0
+    height_px: null
+  view_incidence_cos: 1.0
+  frame_margin: 0.682
+  alternatives: []
+- name: car_2
+  task: plate
+  pose:
+  - 1.2014
+  - -1.1245
+  - 0.0006
+  yaw_deg: 0.0
+  lane: 东竖车道 / 下方街区带
+  shot_distance_m: 0.7
+  metric:
+    unit: 车牌宽 px
+    value: 156.7
+    threshold: 140.0
+    height_px: null
+  view_incidence_cos: 1.0
+  frame_margin: 0.682
+  alternatives: []
+- name: car_3
+  task: plate
+  pose:
+  - 1.2014
+  - -1.762
+  - 0.0006
+  yaw_deg: 0.0
+  lane: 东竖车道 / 底车道
+  shot_distance_m: 0.7
+  metric:
+    unit: 车牌宽 px
+    value: 156.7
+    threshold: 140.0
+    height_px: null
+  view_incidence_cos: 1.0
+  frame_margin: 0.682
+  alternatives: []
