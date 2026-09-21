@@ -135,56 +135,56 @@
       <pose>2.0560 -1.7620 0 0 0 3.1416</pose>
     </include>
     <!-- ===== 车辆+车牌结束 ===== -->
-                      <!-- ===== 人物立牌 (tools/setup_standees.py 生成) ===== -->
+                                                    <!-- ===== 人物立牌 (tools/setup_standees.py 生成) ===== -->
     <include>
       <uri>model://standee_c01</uri>
       <name>A_north_1</name>
-      <pose>-1.0070 1.2680 0 0 0 1.5708</pose>
+      <pose>-1.0070 1.2080 0 0 0 -1.5708</pose>
     </include>
     <include>
       <uri>model://standee_c02</uri>
       <name>A_north_2</name>
-      <pose>-0.9170 1.2680 0 0 0 1.5708</pose>
+      <pose>-0.9170 1.2080 0 0 0 -1.5708</pose>
     </include>
     <include>
       <uri>model://standee_c03</uri>
       <name>A_south_1</name>
-      <pose>-1.0070 1.0470 0 0 0 -1.5708</pose>
+      <pose>-1.0070 1.1070 0 0 0 1.5708</pose>
     </include>
     <include>
       <uri>model://standee_c04</uri>
       <name>A_south_2</name>
-      <pose>-0.9170 1.0470 0 0 0 -1.5708</pose>
+      <pose>-0.9170 1.1070 0 0 0 1.5708</pose>
     </include>
     <include>
       <uri>model://standee_c05</uri>
       <name>A_west_1</name>
-      <pose>-1.2720 1.1125 0 0 0 3.1416</pose>
+      <pose>-1.2120 1.1125 0 0 0 0.0000</pose>
     </include>
     <include>
       <uri>model://standee_F1</uri>
       <name>A_west_2</name>
-      <pose>-1.2720 1.2025 0 0 0 3.1416</pose>
+      <pose>-1.2120 1.2025 0 0 0 0.0000</pose>
     </include>
     <include>
       <uri>model://standee_c06</uri>
       <name>B_north_1</name>
-      <pose>-0.9860 -0.0030 0 0 0 1.5708</pose>
+      <pose>-0.9860 -0.1030 0 0 0 -1.5708</pose>
     </include>
     <include>
       <uri>model://standee_c07</uri>
       <name>B_north_2</name>
-      <pose>-0.8960 -0.0030 0 0 0 1.5708</pose>
+      <pose>-0.8960 -0.1030 0 0 0 -1.5708</pose>
     </include>
     <include>
       <uri>model://standee_c08</uri>
       <name>B_east_1</name>
-      <pose>-0.6070 -0.2150 0 0 0 0.0000</pose>
+      <pose>-0.7070 -0.2150 0 0 0 3.1416</pose>
     </include>
     <include>
       <uri>model://standee_F2</uri>
       <name>B_east_2</name>
-      <pose>-0.6070 -0.1250 0 0 0 0.0000</pose>
+      <pose>-0.7070 -0.1250 0 0 0 3.1416</pose>
     </include>
     <!-- ===== 人物立牌结束 ===== -->
   </world>

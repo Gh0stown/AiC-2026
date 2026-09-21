@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import re
 import sys
@@ -53,11 +54,16 @@ INSET = 0.20
 CLUSTER_GAP = 0.090    # 同组内相邻人偶的间距 (m)
 
 # 边 -> (朝向 yaw, 沿哪根轴排开)
+# ★ 这四组 yaw 是**实拍标定**出来的, 别推: 人物图只在模型的 +x 面渲染,
+#   而 Gazebo 里这个模型的 yaw 实际效果与"右手系 +90° 朝 +y"相反 ——
+#   按照手系推会推错, 实拍 A_north 点位才定下来 (车道侧要看到人物图)。
+#   2026-09-21 来回折腾了三次的教训: **改朝向/挡板必须实拍核对**,
+#   挡板永远放 -x (没人物的那一面), 它只负责挡住"从背后看穿"。
 EDGE = {
-    'north': (90.0, 'x'),
-    'south': (-90.0, 'x'),
-    'east':  (0.0, 'y'),
-    'west':  (180.0, 'y'),
+    'north': (-90.0, 'x'),
+    'south': (90.0, 'x'),
+    'east':  (180.0, 'y'),
+    'west':  (0.0, 'y'),
 }
 
 
@@ -90,6 +96,17 @@ def edge_points(rect, edge, n, inset=None):
         else:
             out.append((fixed, v, yaw))
     return out
+
+
+def _base_support(group, ux, uy, w):
+    """底座矩形 (0.045 x w) 沿 (ux,uy) 方向的支持半径。组名形如 'A/north'，
+    朝向由 EDGE 决定。"""
+    edge = group.split('/')[-1]
+    yaw = math.radians(EDGE[edge][0])
+    # 板法向 = (cos yaw, sin yaw); 底座: 法向 0.045, 切向 w
+    nx, ny = math.cos(yaw), math.sin(yaw)
+    tx, ty = -ny, nx
+    return abs(ux * nx + uy * ny) * (0.045 / 2.0)  # 底座进深 45mm + abs(ux * tx + uy * ty) * (w / 2.0)
 
 
 def load_plan():
@@ -204,12 +221,21 @@ def main():
                 # 记下"哪一组", 同组内 0.09m 是设计间距, 不算干涉
                 placed.append((nm, x, y, w, '%s/%s' % (blk['name'], e['edge'])))
     worst = None
+    # 底座实际是 0.045(板法向) x 宽度(板切向) 的矩形, 两个底座之间要比的是
+    # **沿分离方向的支持半径**, 用板宽当尺寸会误报 (A 街区南北两行就是被误报的)
     for i in range(len(placed)):
         for j in range(i + 1, len(placed)):
             (n1, x1, y1, w1, g1), (n2, x2, y2, w2, g2) = placed[i], placed[j]
             if g1 == g2:
                 continue
-            gap = ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** 0.5 - (w1 + w2) / 2.0
+            dx, dy = x2 - x1, y2 - y1
+            dist = (dx * dx + dy * dy) ** 0.5
+            if dist < 1e-9:
+                continue
+            ux, uy = dx / dist, dy / dist
+            r1 = _base_support(g1, ux, uy, w1)
+            r2 = _base_support(g2, ux, uy, w2)
+            gap = dist - r1 - r2
             if worst is None or gap < worst[0]:
                 worst = (gap, n1, n2)
     print('  缩进: ' + ', '.join('%s %.2fm' % (b['name'], b['inset']) for b in plan))

@@ -20,67 +20,57 @@ waypoints:
     metric: 灯珠直径 px
     value: 101.0
     threshold: 25.0
-- name: 02_A_north
+- name: 02_A_south
   world:
   - -0.962
-  - 1.8521
+  - 1.8611
   yaw: -1.5708
   task: standee
   shot:
     metric: 立牌宽 px
-    value: 176.1
+    value: 134.3
     threshold: 40.0
 - name: 03_top_l
   world:
   - -1.739
   - 1.702
   task: waypoint
-- name: 04_A_west
-  world:
-  - -1.8561
-  - 1.1575
-  yaw: 0.0
-  task: standee
-  shot:
-    metric: 立牌宽 px
-    value: 126.8
-    threshold: 40.0
-- name: 05_mid_l
+- name: 04_mid_l
   world:
   - -1.726
   - 0.483
   task: waypoint
-- name: 06_A_south
+- name: 05_B_east
+  world:
+  - -1.8561
+  - -0.17
+  yaw: 0.0
+  task: standee
+  shot:
+    metric: 立牌宽 px
+    value: 63.9
+    threshold: 40.0
+- name: 06_A_north
   world:
   - -0.962
-  - 0.4629
+  - 0.4639
   yaw: 1.5708
   task: standee
   shot:
     metric: 立牌宽 px
-    value: 187.0
+    value: 128.6
     threshold: 40.0
-- name: 07_B_north
-  world:
-  - -0.941
-  - 0.5961
-  yaw: -1.5708
-  task: standee
-  shot:
-    metric: 立牌宽 px
-    value: 118.4
-    threshold: 40.0
-- name: 08_mid_cl
+- name: 07_mid_cl
   world:
   - -0.877
   - 0.476
   task: waypoint
-- name: 09_mid_c
+- name: 08_mid_c
   world:
   - -0.046
   - 0.479
   task: waypoint
-- name: 10_tl_bot
+- name: 09_tl_bot
   world:
   - -0.11
   - -0.1309
@@ -90,22 +80,12 @@ waypoints:
     metric: 灯珠直径 px
     value: 101.0
     threshold: 25.0
-- name: 11_B_east
-  world:
-  - -0.0379
-  - -0.17
-  yaw: -3.1416
-  task: standee
-  shot:
-    metric: 立牌宽 px
-    value: 152.6
-    threshold: 40.0
-- name: 12_bot_c
+- name: 10_bot_c
   world:
   - -0.108
   - -1.739
   task: waypoint
-- name: 13_car_3
+- name: 11_car_3
   world:
   - 1.2014
   - -1.762
@@ -115,12 +95,12 @@ waypoints:
     metric: 车牌宽 px
     value: 156.7
     threshold: 140.0
-- name: 14_bot_r
+- name: 12_bot_r
   world:
   - 1.224
   - -1.75
   task: waypoint
-- name: 15_car_2
+- name: 13_car_2
   world:
   - 1.2014
   - -1.1245
@@ -130,7 +110,7 @@ waypoints:
     metric: 车牌宽 px
     value: 156.7
     threshold: 140.0
-- name: 16_car_1
+- name: 14_car_1
   world:
   - 1.2014
   - -0.501
@@ -140,7 +120,7 @@ waypoints:
     metric: 车牌宽 px
     value: 156.7
     threshold: 140.0
-- name: 17_ring
+- name: 15_ring
   world:
   - 1.128
   - 1.698

@@ -59,13 +59,19 @@ BASE_X = 0.045         # 底座前后伸出 (防止前后倒)
 #      B  x[-1.475, -0.407] y[-0.537, 0.197] 1.07 x 0.73 m
 #         北面=中车道, 东面=竖车道
 # =============================================================================
+# ★ 每个街区往内缩多少 (m) —— 直接决定"正对着拍能拍到多少身体":
+#     可见高度 ≈ 0.366*d - 0.046  (d = 相机到立牌距离)
+#     d=0.435(缩0.20) -> 75%   d=0.535(缩0.26) -> 100%(刚拍全)
+#   A 街区深 0.62m, 南北两组各缩 0.26 后还剩 0.10m 间距 (底座不打架);
+#   B 街区深 0.73m, 可以缩到 0.30。
 BLOCKS = [
-    dict(name='A', rect=[-1.472, 0.847, -0.452, 1.468], edges=[
+    # inset_m: 该街区立牌往边线内缩多少 (直接决定正对拍摄能拍到多少身体)
+    dict(name='A', inset_m=0.26, rect=[-1.472, 0.847, -0.452, 1.468], edges=[
         dict(edge='north', people=['standee_c01', 'standee_c02']),
         dict(edge='south', people=['standee_c03', 'standee_c04']),
         dict(edge='west',  people=['standee_c05', 'standee_F1']),
     ]),
-    dict(name='B', rect=[-1.475, -0.537, -0.407, 0.197], edges=[
+    dict(name='B', inset_m=0.30, rect=[-1.475, -0.537, -0.407, 0.197], edges=[
         dict(edge='north', people=['standee_c06', 'standee_c07']),
         dict(edge='east',  people=['standee_c08', 'standee_F2']),
     ]),
@@ -106,7 +112,11 @@ def write_model(name, src_png, size_m, mat_name):
     shutil.copyfile(src_png, os.path.join(tex_d, '%s.png' % name))
 
     # OGRE 材质: alpha_rejection 直接把透明像素丢掉, 立牌边缘就是人物轮廓
-    with open(os.path.join(scr_d, 'standee.material'), 'w') as f:
+    # ★ 材质脚本的**文件名也必须每个模型唯一**: OGRE 把资源按"文件名"全局注册,
+    #   18 个模型都叫 standee.material 时只有一个能加载, 其余的材质名找不到 ->
+    #   对应立牌在相机里直接**不渲染** (实测: c01/c02 从头到尾没出现过,
+    #   而 A_north 点位拍到的其实是后面 c03/c04 那对)。和 §7.1 车辆那次同源。
+    with open(os.path.join(scr_d, '%s.material' % name), 'w') as f:
         f.write('''// 自动生成 (tools/gen_standees.py) —— 人物立牌
 material %s
 {
@@ -149,14 +159,14 @@ material %s
           </script>
         </material>
       </visual>
-      <!-- ★ 背面挡板 (放 +x 面): Gazebo 的 box 会把贴图糊到**六个面**上, 于是从
-           背后看也是(镜像的)人物图 —— 实物的模切立牌背面是纯色卡纸。不挡的话:
-             1) 视觉模型可能学到"正反两面都是人", 与真机域不一致 (sim2real 断裂);
-             2) 从背后拍到的图会被误判成"正视目标" (调试时就吃过这个亏)。
-           ★ 哪一面是"背面"是**实拍标定**出来的, 不是推的: 把车用 x:=/y:=/yaw:=
-             直接生成在 A_north 点位抓一帧 —— 挡板放 +x 时车道侧才看到人物图,
-             放 -x 时车道侧看到的是纯色板。所以**朝车道/街区外的是模型的 -x 面**。
-             改这里之前先跑一遍 tools/capture_points.py 核对。 -->
+      <!-- ★ 背面挡板 (放 +x 面 = 透明的那面): Gazebo 的 box 六个面共用一张贴图,
+           实拍发现从背后看会**看穿** (-x 面渲染人物, +x 面 alpha 被丢弃)。
+           所以: 人物图在 **-x** 面 -> yaw 要让 -x 朝车道/街区外 (见 setup_standees.py
+           的 EDGE 表, 已按"整体 +180°"修正); 挡板放 **+x** 挡住背面。
+           ⚠ 这块挡板/朝向的组合是**实拍标定**出来的, 推导会推错 (来回折腾过三次)。
+             核对: 用 launch 参数把车生成在点位上抓帧 (交接文档 §4.6), 和
+             ~/复赛资料/人员/ 的原图对: 车道侧要看到人物正面
+             (c01=戴草帽拿修枝剪的园艺工, c02=抱书的眼镜男)。 -->
       <visual name="back">
         <pose>{xb:.4f} 0 {zb:.4f} 0 0 0</pose>
         <geometry><box><size>0.0010 {wb:.4f} {hb:.4f}</size></box></geometry>
@@ -243,7 +253,7 @@ def main():
             #   拍摄距离 d -> 可见高度 ≈ 0.366*d - 0.046。往里挪 0.20m 后 d 从
             #   0.28m 涨到 ~0.44m, 可见比例 38% -> 75%, 需要的俯仰 17° -> 5°。
             #   (工具: setup_standees.py 读它; 计算见 gen_recognition_points.py)
-            yaml.safe_dump({'inset_m': 0.20, 'standees': manifest, 'blocks': BLOCKS},
+            yaml.safe_dump({'standees': manifest, 'blocks': BLOCKS},
                            f, allow_unicode=True,
                            default_flow_style=False, sort_keys=False)
         print()
