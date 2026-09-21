@@ -186,7 +186,11 @@ python3 src/competition_arena/scripts/build_arena.py --stripes raised --stripe-h
 
 1. **4.2 m 是外沿还是内净空？** 现在按"外沿到外沿 = 4.2 m"处理（内净空 ≈ 4.152 m）。
    若官方口径是内净空 4.2 m，用 `--arena 4.248` 重新生成即可。
-2. **墙高 0.5 m** 是猜的，有官方尺寸告诉我改一下。
+2. ~~**墙高 0.5 m** 是猜的~~ → **已改成 0.30 m**（2026-09-21）。原因：官方红绿灯的
+   灯箱在离地 0.34~0.48 m，而横排灯朝 +x 摆在顶部时灯箱会伸到墙外（最外侧透镜
+   y=2.22）。相机高 0.20 m 时视线在墙处只有 z=0.352 m，**0.5 m 的墙会把它挡住**。
+   降到 0.30 m 后视线高于墙顶 ✓，且仍能挡住 0.2 m 高的车体、雷达照常看得见、
+   2D 代价地图不受影响。见 [`src/competition_arena/docs/traffic_light_model.md`](src/competition_arena/docs/traffic_light_model.md)。
 3. **条纹区域**的含义（见第 6 节）。
 4. **机器人平台**：本机没有装 TurtleBot3，所以配了一个通用差速底盘做测试。
    如果比赛指定平台（TurtleBot3 / 自制车），把尺寸告诉我，我按真车参数改 `urdf/`。

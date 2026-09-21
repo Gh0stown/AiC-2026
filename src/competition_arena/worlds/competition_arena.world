@@ -48,12 +48,12 @@
       <static>true</static>
       <link name="walls">
         <collision name="wall_00">
-          <pose>0.000000 2.089697 0.250000 0 0 0</pose>
-          <geometry><box><size>4.200000 0.020605 0.500000</size></box></geometry>
+          <pose>0.000000 2.089697 0.150000 0 0 0</pose>
+          <geometry><box><size>4.200000 0.020605 0.300000</size></box></geometry>
         </collision>
         <visual name="wall_00">
-          <pose>0.000000 2.089697 0.250000 0 0 0</pose>
-          <geometry><box><size>4.200000 0.020605 0.500000</size></box></geometry>
+          <pose>0.000000 2.089697 0.150000 0 0 0</pose>
+          <geometry><box><size>4.200000 0.020605 0.300000</size></box></geometry>
           <material>
             <script>
               <uri>file://media/materials/scripts/gazebo.material</uri>
@@ -62,12 +62,12 @@
           </material>
         </visual>
         <collision name="wall_01">
-          <pose>0.000000 -2.087980 0.250000 0 0 0</pose>
-          <geometry><box><size>4.200000 0.024039 0.500000</size></box></geometry>
+          <pose>0.000000 -2.087980 0.150000 0 0 0</pose>
+          <geometry><box><size>4.200000 0.024039 0.300000</size></box></geometry>
         </collision>
         <visual name="wall_01">
-          <pose>0.000000 -2.087980 0.250000 0 0 0</pose>
-          <geometry><box><size>4.200000 0.024039 0.500000</size></box></geometry>
+          <pose>0.000000 -2.087980 0.150000 0 0 0</pose>
+          <geometry><box><size>4.200000 0.024039 0.300000</size></box></geometry>
           <material>
             <script>
               <uri>file://media/materials/scripts/gazebo.material</uri>
@@ -76,12 +76,12 @@
           </material>
         </visual>
         <collision name="wall_02">
-          <pose>-2.087980 0.000000 0.250000 0 0 0</pose>
-          <geometry><box><size>0.024039 4.200000 0.500000</size></box></geometry>
+          <pose>-2.087980 0.000000 0.150000 0 0 0</pose>
+          <geometry><box><size>0.024039 4.200000 0.300000</size></box></geometry>
         </collision>
         <visual name="wall_02">
-          <pose>-2.087980 0.000000 0.250000 0 0 0</pose>
-          <geometry><box><size>0.024039 4.200000 0.500000</size></box></geometry>
+          <pose>-2.087980 0.000000 0.150000 0 0 0</pose>
+          <geometry><box><size>0.024039 4.200000 0.300000</size></box></geometry>
           <material>
             <script>
               <uri>file://media/materials/scripts/gazebo.material</uri>
@@ -90,12 +90,12 @@
           </material>
         </visual>
         <collision name="wall_03">
-          <pose>2.087980 0.000000 0.250000 0 0 0</pose>
-          <geometry><box><size>0.024039 4.200000 0.500000</size></box></geometry>
+          <pose>2.087980 0.000000 0.150000 0 0 0</pose>
+          <geometry><box><size>0.024039 4.200000 0.300000</size></box></geometry>
         </collision>
         <visual name="wall_03">
-          <pose>2.087980 0.000000 0.250000 0 0 0</pose>
-          <geometry><box><size>0.024039 4.200000 0.500000</size></box></geometry>
+          <pose>2.087980 0.000000 0.150000 0 0 0</pose>
+          <geometry><box><size>0.024039 4.200000 0.300000</size></box></geometry>
           <material>
             <script>
               <uri>file://media/materials/scripts/gazebo.material</uri>
@@ -106,11 +106,11 @@
       </link>
     </model>
 
-              <!-- ===== 临时红绿灯 (tools/setup_traffic_lights.py 生成) ===== -->
+                <!-- ===== 临时红绿灯 (tools/setup_traffic_lights.py 生成) ===== -->
     <include>
-      <uri>model://traffic_light_h</uri>
+      <uri>model://traffic_light_h_single</uri>
       <name>tl_top</name>
-      <pose>-0.1500 2.0000 0.0000 0 0 -1.5708</pose>
+      <pose>-0.1500 2.0000 0.0000 0 0 0.0000</pose>
     </include>
     <include>
       <uri>model://traffic_light_h</uri>

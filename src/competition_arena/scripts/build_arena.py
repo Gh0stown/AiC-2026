@@ -11,8 +11,8 @@ build_arena.py -- 由俯视平面图 (map_source.jpg) 生成 Gazebo 比赛场地
   tools/arena_geometry.json            提取出的几何数据 (便于二次开发)
 
 用法:
-  python3 scripts/build_arena.py                       # 默认: 场地外沿 4.2m, 墙高 0.5m
-  python3 scripts/build_arena.py --arena 4.2 --wall-height 0.5
+  python3 scripts/build_arena.py                       # 默认: 场地外沿 4.2m, 墙高 0.30m
+  python3 scripts/build_arena.py --arena 4.2 --wall-height 0.30
   python3 scripts/build_arena.py --stripes raised --stripe-height 0.03
 """
 import argparse
@@ -353,7 +353,7 @@ def main():
     ap = argparse.ArgumentParser(description='由平面图生成 Gazebo 比赛场地')
     ap.add_argument('--arena', type=float, default=4.2,
                     help='场地尺寸 (m), 默认 4.2  ->  4.2 x 4.2')
-    ap.add_argument('--wall-height', type=float, default=0.5, help='墙高 (m), 默认 0.5')
+    ap.add_argument('--wall-height', type=float, default=0.30, help='墙高 (m), 默认 0.30')
     ap.add_argument('--floor-thickness', type=float, default=0.02, help='地板厚度 (m)')
     ap.add_argument('--stripes', choices=['flat', 'raised'], default='flat',
                     help='地面条纹块: flat=仅贴图; raised=做成低矮凸起')

@@ -183,7 +183,7 @@ def model_sdf(name, layout, posts='double'):
                  '<child>lamp_%s</child><pose>0 0 0 0 0 0</pose><axis><xyz>1 0 0</xyz>'
                  '<limit><lower>%.3f</lower><upper>%.3f</upper><effort>1</effort>'
                  '<velocity>1</velocity></limit></axis></joint>'
-                 % (c, c, OFF - 0.005, ON + 0.005))
+                 % (c, c, 0.0, ON + 0.005))
     o += ['  </model>', '</sdf>', '']
     return '\n'.join(o)
 
