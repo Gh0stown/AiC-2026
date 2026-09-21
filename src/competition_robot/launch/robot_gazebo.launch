@@ -19,6 +19,7 @@
   <arg name="world"    default="$(find competition_arena)/worlds/competition_arena.world"/>
   <arg name="gui"      default="true"/>
   <arg name="rviz"     default="true"/>
+  <arg name="traffic_light" default="true"/>   <!-- 是否启动红绿灯切换节点 -->
   <arg name="paused"   default="false"/>
   <arg name="encoders" default="true"/>
   <!-- 出生位姿: 场地**右上角**区域, 车头朝左 (世界 -x 方向)。
@@ -103,6 +104,10 @@
     <!-- ★ 必须和上面的出生位姿一致, 否则 /odom 会整体偏出去 -->
     <rosparam param="initial_pose" subst_value="true">[$(arg x), $(arg y), $(arg yaw)]</rosparam>
   </node>
+
+  <!-- 红绿灯切换节点 (灯本身随 world 加载, 这里只是控制它红/黄/绿循环) -->
+  <include if="$(arg traffic_light)"
+           file="$(find competition_arena)/launch/traffic_light.launch"/>
 
   <node if="$(arg rviz)" name="rviz" pkg="rviz" type="rviz"
         args="-d $(find competition_robot)/rviz/robot.rviz" required="false"/>

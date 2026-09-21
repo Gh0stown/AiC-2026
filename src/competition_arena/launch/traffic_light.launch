@@ -15,7 +15,8 @@
     rostopic echo /traffic_light/state
 -->
 <launch>
-  <node name="traffic_light" pkg="competition_arena" type="traffic_light.py" output="screen">
+  <node name="traffic_light" pkg="competition_arena" type="traffic_light.py"
+        output="screen" respawn="true" respawn_delay="3">
     <param name="config" value="$(find competition_arena)/config/traffic_lights.yaml"/>
   </node>
 </launch>
