@@ -80,7 +80,48 @@
 
 工具：`tools/gen_vision_dataset.py`（生成）+ `tools/preview_dataset.py`（预览/统计）
 
-**标注为什么是精确的**：场里每个道具的位姿都有唯一真值源
+### 默认：只出图，手工标注（X-AnyLabeling）
+
+> 2026-09-22 决定：自动投影框虽然原理精确，但仍有残差
+> （传送位姿残差 + 灯箱受重力下沉约 3 cm，1 m 处≈35 px），
+> 而这种**固定场景**手工标 200 张完全够，标注质量更可控。
+> 所以生成器**默认只出图**，框变成 `--with-labels` 可选。
+
+```bash
+# 主力机：起仿真（只要这个, 不用导航/建图）
+roslaunch competition_robot robot_gazebo.launch gui:=false rviz:=false
+# 出图（平铺一个文件夹, 文件名带场景, 直接导进 X-AnyLabeling）
+python3 tools/gen_vision_dataset.py --n 200 --out datasets/vision_raw
+```
+
+产出：`datasets/vision_raw/images/*.jpg`（平铺）+ `meta.jsonl`。
+
+**`meta.jsonl` 一定要留着**：里面的 **灯态**（`light`）和 **车牌字符串**
+（`objects[].plate`）是"整图标签"，手工标注很难标 —— 训完模型评估、以及
+红绿灯/车牌这两个任务的答案，都要靠它。
+
+手工标注建议的**类别顺序**（与后续训练一致）：
+
+| id | 类名 | 是什么 |
+|---|---|---|
+| 0 | `standee` | 社区人员立牌 c01~c08 |
+| 1 | `non_community` | 非社区人员 F1/F2 |
+| 2 | `traffic_light` | 红绿灯灯箱 |
+| 3 | `plate` | 车牌 |
+
+在 X-AnyLabeling 里：导入 `images/` → 按上表建 4 类 → 画框 → **导出 YOLO 格式**。
+
+### 可选：连自动框一起出
+
+```bash
+python3 tools/gen_vision_dataset.py --n 200 --out datasets/vision --with-labels --split
+```
+（`--with-labels` 会写 YOLO txt + `data.yaml`，`--split` 会分 train/val。
+自动框可以用来**和手工框对照**，或在赶时间时当预标注。）
+
+### 自动标注的原理（仍适用于 --with-labels）
+
+场里每个道具的位姿都有唯一真值源
 （`standees.yaml` / `cars.yaml` / `traffic_lights.yaml` + world 里的 include pose），
 相机模型也在 `robot_params.yaml` 里 —— 所以把每个物体的 **3D 包围盒投影**到像素就是标注。
 几何与相机数学**直接 import `gen_recognition_points.py`**，不维护第二份真值。

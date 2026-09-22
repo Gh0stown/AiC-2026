@@ -1,9 +1,28 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""从 Gazebo 自动生成视觉数据集（YOLO 格式）—— 合成数据，标注是**精确的**。
+"""从 Gazebo 批量生成视觉数据集（默认**只出图**，供 X-AnyLabeling 手工标注）。
 
-为什么不用手工标
-----------------
+默认行为（2026-09-22 按使用习惯改的）
+-------------------------------------
+    * **只存图片**，不写 YOLO 框 —— 手工标注更可控（自动投影框有残差：
+      传送位姿残差 + 灯箱受重力下沉约 3cm，1m 处≈35px）
+    * 图片**平铺**在 `<out>/images/`，文件名带场景（如 `000004_A_north.jpg`），
+      一个文件夹直接导进 X-AnyLabeling
+    * 仍然写 `meta.jsonl`：每张图的位姿 / **灯态** / **车牌真值** / 物体清单
+      —— 灯态和车牌字符串是"整图标签"，手工标注很难标，评估时要用
+    * 想连自动框一起出：加 `--with-labels`（可用于和手工框对照）
+
+类别建议（手工标注时按这个顺序, 与后续训练一致）:
+    0 standee        社区人员立牌 c01..c08
+    1 non_community  非社区人员 F1/F2
+    2 traffic_light  红绿灯灯箱
+    3 plate          车牌
+
+原始说明（自动标注的原理，仍适用于 --with-labels）:
+
+
+为什么投影标注是准的
+------------------
 场里每个道具的位姿都有唯一真值源（`standees.yaml` / `cars.yaml` /
 `traffic_lights.yaml` + world 里的 include pose），相机模型也在
 `robot_params.yaml` 里。所以只要知道车在哪，就能把每个物体的 3D 包围盒
@@ -291,13 +310,16 @@ def capture(args, poses, out_dir):
 
     img_dir = os.path.join(out_dir, 'images')
     lbl_dir = os.path.join(out_dir, 'labels')
-    for sub in ('train', 'val'):
+    subs = ('train', 'val') if args.split else ('',)
+    for sub in subs:
         os.makedirs(os.path.join(img_dir, sub), exist_ok=True)
-        os.makedirs(os.path.join(lbl_dir, sub), exist_ok=True)
+        if args.with_labels:
+            os.makedirs(os.path.join(lbl_dir, sub), exist_ok=True)
     meta = open(os.path.join(out_dir, 'meta.jsonl'), 'w')
     objects = build_objects()
 
-    print('开始采集 %d 张 -> %s' % (len(poses), out_dir))
+    print('开始采集 %d 张 -> %s   (%s)'
+          % (len(poses), out_dir, '含 YOLO 框' if args.with_labels else '只出图, 平铺'))
     done = skipped = 0
     for idx, (scenario, mode, x, y, yaw) in enumerate(poses):
         # --- 传送 ---
@@ -350,16 +372,18 @@ def capture(args, poses, out_dir):
             skipped += 1
             continue
 
-        sub = 'val' if (scenario in args.val_points_set) else 'train'
+        sub = ('val' if (scenario in args.val_points_set) else 'train') if args.split else ''
         fn = '%06d_%s' % (idx, scenario)
         ext = args.img_ext
         cv2.imwrite(os.path.join(img_dir, sub, fn + '.' + ext), frame,
                     [cv2.IMWRITE_JPEG_QUALITY, args.jpeg_quality] if ext == 'jpg' else [])
-        with open(os.path.join(lbl_dir, sub, fn + '.txt'), 'w') as f:
-            for cls, box, _o in labels:
-                f.write(yolo_line(cls, box, ROBOT) + '\n')
+        if args.with_labels:
+            with open(os.path.join(lbl_dir, sub, fn + '.txt'), 'w') as f:
+                for cls, box, _o in labels:
+                    f.write(yolo_line(cls, box, ROBOT) + '\n')
         meta.write(json.dumps(dict(
-            file='images/%s/%s.%s' % (sub, fn, ext), split=sub, scenario=scenario, mode=mode,
+            file=('images/%s/%s.%s' % (sub, fn, ext)) if sub else ('images/%s.%s' % (fn, ext)),
+            split=sub or '-', scenario=scenario, mode=mode,
             pose=[round(x, 4), round(y, 4), round(yaw, 4)],
             pose_truth=[round(lx, 4), round(ly, 4), round(lyaw, 4)],
             light=st['light'],
@@ -373,7 +397,8 @@ def capture(args, poses, out_dir):
         if done % 25 == 0:
             print('  %d/%d (跳过 %d)' % (done, len(poses), skipped))
     meta.close()
-    write_data_yaml(out_dir)
+    if args.with_labels:
+        write_data_yaml(out_dir)
     print('完成: 存了 %d 张, 跳过 %d 张 -> %s' % (done, skipped, out_dir))
     return 0
 
@@ -391,7 +416,8 @@ def write_data_yaml(out_dir):
 # =============================================================================
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--n', type=int, default=1200, help='目标图片数')
+    ap.add_argument('--n', type=int, default=200,
+                    help='目标图片数 (固定场景 200 张就够; 要练大模型再加)')
     ap.add_argument('--out', default='datasets/vision')
     ap.add_argument('--mode-mix', default='points:0.6,random:0.3,neg:0.1')
     ap.add_argument('--points', default='', help='只用这些识别点位 (逗号分隔), 空=全部')
@@ -407,6 +433,10 @@ def main():
     ap.add_argument('--jpeg-quality', type=int, default=92)
     ap.add_argument('--robot-model', default='competition_robot')
     ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--with-labels', action='store_true',
+                    help='同时写 YOLO 框 (默认只出图; 自动框有残差, 一般不需要)')
+    ap.add_argument('--split', action='store_true',
+                    help='按 train/val 分子目录存 (默认平铺, 方便导进标注工具)')
     ap.add_argument('--dry-run', action='store_true', help='不连仿真, 只算位姿/标注并打印统计')
     args = ap.parse_args()
 
@@ -436,12 +466,13 @@ def main():
             for cls, box, _v in ls:
                 cnt[cls] += 1
                 sizes[cls].append(max(box[2] - box[0], box[3] - box[1]))
-        print('\n前 400 个位姿的标注统计:')
+        k = min(len(poses), 400)
+        print('\n前 %d 个位姿的（投影）标注统计 —— 只作参考, 手工标注以实际为准:' % k)
         for c in CLASSES:
             s = sizes[c]
             print('  %-14s %5d 个框   中位边长 %s px' % (
                 c, cnt[c], ('%.0f' % np.median(s)) if s else '-'))
-        print('  空帧 %d/400' % miss)
+        print('  空帧 %d/%d' % (miss, k))
         return 0
 
     os.makedirs(args.out, exist_ok=True)
