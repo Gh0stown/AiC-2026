@@ -1,4 +1,4 @@
-# Issue 处理记录（7 条，2026-09-22）
+# Issue 处理记录（9 条，2026-09-23）
 
 > 这份文件有两个用途：① 每个 issue 的**实现方回复草稿**（可直接贴到 GitHub）；
 > ② 任务二技术方案文档的**问题定位/修复证据**素材。
@@ -16,6 +16,7 @@
 | 6 | 新路线没接倒车入库 | 配置只加在旧路线；脚本硬编码 `--no-park`；验收还在验旧路线 | 已修 |
 | 7 | 导航落点退化 +81%/+103% | ① 误改 AMCL `update_min_d/a=0.0` ② `laser_wall_pose` 的 `inner` 没跟外扩更新 | 已修（两层） |
 | 8 | 数据集 points 模式只有 ~60% 拍到目标 | 抖动固定(0.30 m / 25°) vs 拍摄距离可变(0.5~1.0 m) 失配：0.5 m 处 25° 横移 0.23 m ≈ 3.5 个立牌宽 | 已修 |
+| 9 | YOLO 训练完但收尾 val 崩 (`FontManager.addfont`) | venv 用了 `--system-site-packages`，系统 matplotlib 3.1.2 遮蔽 venv 版，pip 就静默不装了 | 已修（钉版本+自检） |
 
 ---
 
@@ -208,3 +209,53 @@
 
 **教训**：任何"固定容差"都要先问一句"它作用在什么尺度上"。这里目标宽度 6.6 cm、
 拍摄距离 0.5~1.0 m，两者都远小于固定容差，于是容差本身成了主导误差项。
+
+---
+
+## #9 YOLO 训练跑完但收尾 val 崩掉（matplotlib 被系统版遮蔽）
+
+**现象**：`model.train(...)` 全程正常 —— 100 epoch 跑完、打出
+`Optimizer stripped from .../best.pt`，权重也落盘了；但紧接着的 `model.val()` 抛
+
+```
+AttributeError: 'FontManager' object has no attribute 'addfont'
+  File ".../ultralytics/utils/metrics.py", line 880, in ap_per_class
+    plot_pr_curve(x, prec_values, ap, save_dir / f"{prefix}PR_curve.png", ...)
+```
+
+很容易误判成"训练本身有问题"，其实训练完全没问题，是**画图库太老**。
+
+**根因**：`.venv` 是 `--system-site-packages`（为了让 `rospy` / `cv_bridge` 可见），
+于是系统 dist-packages 的老版本会**遮蔽** venv 版本。`setup_vision_env.sh` 里
+`pip install ... matplotlib ...` 因为系统已经有 matplotlib 3.1.2，pip 认为
+"Requirement already satisfied" 就不装了 —— ultralytics 8.4 要的是 **>=3.3**。
+
+同一个遮蔽问题还波及另三个包：
+
+| 包 | 系统版 | 要求 | 后果 |
+|---|---|---|---|
+| matplotlib | 3.1.2 | >=3.3 | **硬崩**（本 issue） |
+| Pillow | 7.0.0 | >=7.1.0 | 潜伏 |
+| requests | 2.22.0 | >=2.23.0 | 潜伏 |
+| numpy | 1.17.4 | >=1.23 | 之前已修（numpy==1.24.4） |
+
+**关键**：只看 `matplotlib.__version__` 看不出来 —— 得看 `__file__` 来自
+`/.venv/` 还是 `/usr/lib/python3/dist-packages/`。
+
+**修法**：
+
+1. 显式钉版本，让 pip 必须装进 venv：
+   `matplotlib==3.7.5`、`Pillow==9.5.0`、`requests==2.32.3`
+   （3.7.5 是 py3.8 最后一版；Pillow 故意不用 10.x —— 10 删了 `Image.ANTIALIAS`
+   这类老 API，hyperlpr3 还在用）。
+2. `tools/setup_vision_env.sh` 的自检改成**连来源目录一起打印 + 判最低版本**，
+   不达标的直接标 `FAIL`。这是防复发的关键：不然换台机器重建又会踩。
+3. 实测 `tools/plate_ocr.py --selftest` 升级后仍是 **3/3**，无回归。
+
+**验证**：修完 `val(plots=True)` 正常产出 6 张图
+（`BoxPR_curve.png` / `BoxF1_curve.png` / `confusion_matrix*.png` …），
+`mAP50 = 0.803`。
+
+**教训**：`--system-site-packages` 会让"装依赖"这一步**静默失效**。凡是
+"系统里也有同名包"的依赖（numpy / matplotlib / Pillow / requests / PyYAML），
+都必须钉版本；并且自检要同时看**版本**和**来源路径**，只看版本会漏。
