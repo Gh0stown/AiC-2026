@@ -76,6 +76,77 @@
 
 ---
 
+## 3.5 数据集怎么造（合成数据，零手工标注）
+
+工具：`tools/gen_vision_dataset.py`（生成）+ `tools/preview_dataset.py`（预览/统计）
+
+**标注为什么是精确的**：场里每个道具的位姿都有唯一真值源
+（`standees.yaml` / `cars.yaml` / `traffic_lights.yaml` + world 里的 include pose），
+相机模型也在 `robot_params.yaml` 里 —— 所以把每个物体的 **3D 包围盒投影**到像素就是标注。
+几何与相机数学**直接 import `gen_recognition_points.py`**，不维护第二份真值。
+
+**采什么**：三种模式混合
+
+| 模式 | 占比 | 说明 |
+|---|---|---|
+| `points` | 0.6 | 在 10 个识别点位附近抖动（±0.3 m / ±25°）—— **真实工作包线** |
+| `random` | 0.3 | 可行驶区域内随机位姿（提高泛化；画面里没目标的不存） |
+| `neg` | 0.1 | 空帧（抑制误检） |
+
+**怎么采**：`/gazebo/set_model_state` 把车**传送**过去，不需要导航/建图，
+只要 `roslaunch competition_robot robot_gazebo.launch`。
+
+> ⚠️ 两个必须踩过的坑（已修，写在代码注释里）：
+> ① 判"新的一帧"要比较**图自己的 `header.stamp`**，不能用消息到达时间 ——
+>    相机出图有延迟，传送后到达的帧可能是传送前渲染的（我曾因此存了一堆错位的图）；
+> ② 标注要用 **`/odom_groundtruth` 的真值位姿（含 yaw）**，不要用指令位姿。
+
+### 主力机上的跑法
+
+```bash
+# 1. 起仿真（不用 gui/rviz，省性能）
+roslaunch competition_robot robot_gazebo.launch gui:=false rviz:=false
+
+# 2. 另开终端：先干跑看统计（几秒，不连仿真）
+python3 tools/gen_vision_dataset.py --n 2000 --dry-run
+
+# 3. 真采（1200~2000 张比较合适）
+python3 tools/gen_vision_dataset.py --n 2000 --out datasets/vision
+
+# 4. 预览 + 统计（出一张带框的总览图, 用来肉眼验标注）
+python3 tools/preview_dataset.py datasets/vision --n 12
+```
+
+**产出**：
+
+```
+datasets/vision/
+  images/{train,val}/*.jpg     1280x960, q92 (约 200~300 KB/张)
+  labels/{train,val}/*.txt     YOLO 格式: cls cx cy w h (归一化)
+  data.yaml                    直接给 ultralytics 用
+  meta.jsonl                   每张图: 位姿/真值位姿/灯态/车牌真值/物体清单/灯珠位置
+  preview.png                  preview_dataset.py 生成
+```
+
+**规模与耗时**：1200 张 ≈ 300 MB。渲染是瓶颈 —— 本沙箱约 3~10 s/张（要 2~3 小时），
+**主力机有 GPU 应该几分钟到十几分钟**，所以这一步交给主力机跑。
+
+**类别**（4 类，一张数据集同时服务三个任务）：
+
+| id | 类名 | 是什么 | 对应任务 |
+|---|---|---|---|
+| 0 | `standee` | 社区人员立牌 c01~c08（8 个） | 人偶检测/计数 |
+| 1 | `non_community` | 非社区人员 F1/F2（2 个） | 总决赛"人员身份" |
+| 2 | `traffic_light` | 红绿灯灯箱（2 个） | 红绿灯状态识别 |
+| 3 | `plate` | 车牌（3 个） | 车牌识别 |
+
+- **灯态不是框**：它是整张图的标签，记在 `meta.jsonl` 的 `light` 字段
+  （采集时订阅 `/traffic_light/state`，循环 绿6s→黄2s→红6s，采久了三种都有）；
+- **车牌字符串**记在 `meta.jsonl` 的 `objects[].plate`，给 HyperLPR3 用；
+- **灯珠像素位置**也存了（`lamps`），做"箱内三颗按 15.6%/50%/84.4% 采样判色"时可直接校验。
+
+---
+
 ## 4. 验收：对着真值自动打分（这是最能加分的一环）
 
 `captures/<run>/index.csv` 里已经有每张图的真值，所以可以写一个
