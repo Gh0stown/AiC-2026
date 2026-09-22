@@ -164,7 +164,10 @@ def main():
         out['reverse_park'] = {
             'from': ring_name,                     # ★ 'from' 是关键字, 只能这样写
             'to': [round(start[0], 4), round(start[1], 4), 3.1416],
-            'note': '航点跑完后倒车入库: from=起倒点(航点名), to=[x,y,yaw]=库位中心位姿',
+            'note': ('航点跑完后倒车入库: from=起倒点(航点名), to=[x,y,yaw]=库位中心位姿。'
+                     '库位仍取出生点那个角落 —— 场地外扩只把**围墙**往外挪了 0.10m, '
+                     '白线没动, 所以 (1.772,1.782) 依然合法; 而右下角那 3 个真停车位'
+                     '被 3 辆车占着 (车牌识别任务用), 空不出来。'),
         }
     with open(a.out_yaml, 'w') as f:
         f.write('# 最终巡检路线 (唯一真值源) —— 由 tools/gen_recognition_route.py 生成\n'
