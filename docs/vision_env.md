@@ -39,10 +39,18 @@ tools/setup_vision_env.sh --recreate   # 清空重来
 | ultralytics | 8.4.155 | YOLOv8 / YOLO11 |
 | OpenCV | 4.10.0 | 固定此版本，更新的 5.x 与 py3.8 生态不匹配 |
 | numpy | 1.24.4 | py3.8 的最后一版 |
+| matplotlib | **3.7.5** | py3.8 的最后一版；低于 3.3 会让 ultralytics 画图崩，见坑 4 |
+| Pillow | **9.5.0** | 满足 ultralytics 的 >=7.1.0，且保留 hyperlpr3 依赖的老 API（10.x 删了）|
+| requests | **2.32.3** | 满足 ultralytics 的 >=2.23.0（焦点系统自带 2.22.0 不达标）|
 | HyperLPR3 | 0.1.3 | 中文车牌识别 |
 | onnxruntime | 1.19.2 | HyperLPR3 的推理后端 |
 
 自检结果：`torch.cuda.is_available() == False`（本机无显卡）、`rospy` 在 venv 内可用 ✓
+
+> 加粗那几行是 2026-09-23 补钉的。原因是 venv 用 `--system-site-packages`，
+> 系统自带的老版本会**遮蔽** venv 版本，而 pip 看到"已满足"就不装了 —— 见坑 4。
+> `tools/setup_vision_env.sh` 结尾的自检会连**包来自哪个目录**一起打印，
+> 以后重建完看一眼就能发现这类问题（`SYSTEM` 且版本不达标的会标 `FAIL`）。
 
 ## 日常使用
 
@@ -53,7 +61,7 @@ python -c "import torch, ultralytics, cv2; print(torch.__version__)"
 
 或直接用 `.venv/bin/python your_script.py`。
 
-## 三个踩过的坑（重建时注意）
+## 四个踩过的坑（重建时注意）
 
 ### 1. `download-r2.pytorch.org` 返回 403
 
@@ -72,6 +80,44 @@ PyTorch 索引页里的 href 是绝对 URL，指向 CDN 主机 `download-r2.pyto
 
 镜像上的 `torch-2.4.1` 是 CUDA 构建，会连带拖 ~2.6 GB 的 `nvidia-*` 依赖。
 **必须先装好 torch 再装 ultralytics**，否则 ultralytics 的依赖解析会去拉 CUDA 版。
+
+### 4. 系统老包遮蔽 venv，导致 ultralytics 收尾崩掉（最坑的一个）
+
+venv 是 `--system-site-packages`（为了让 `rospy` / `cv_bridge` 可见），所以
+**系统 dist-packages 里的老版本会遮蔽 venv 里的新版本**，而 pip 看到系统版"已满足"
+就不再安装。不钉版本的话，下面这几个会悄悄用系统版：
+
+| 包 | 系统焦点版 | ultralytics 要求 | 后果 |
+|---|---|---|---|
+| **matplotlib** | **3.1.2** | >= 3.3 | **硬崩**：训练跑完、`best.pt` 也存了，但收尾的 `model.val()` / `yolo val` 抛 `AttributeError: 'FontManager' object has no attribute 'addfont'`，拿不到任何指标图 |
+| Pillow | 7.0.0 | >= 7.1.0 | 潜伏，可能出怪问题 |
+| requests | 2.22.0 | >= 2.23.0 | 潜伏，影响模型下载 |
+| numpy | 1.17.4 | >= 1.23 | cv2 报 "compiled against API version 0xe"，pandas 报 `numpy.random has no attribute BitGenerator` |
+
+matplotlib 那条最容易误判：**训练日志看起来全绿**（`100 epochs completed`、
+`Optimizer stripped`），只有最后一步 val 崩，很像是"训练有问题"，其实是画图库太老。
+
+诊断看**包来自哪个目录**，光看版本号看不出来：
+
+```bash
+.venv/bin/python -c "import matplotlib,PIL,requests,numpy as n; \
+  print([(m.__name__, m.__version__, m.__file__) for m in (matplotlib,PIL,requests,n)])"
+```
+
+修法就是显式钉版本让 pip 必须装进 venv（`tools/setup_vision_env.sh` 已经这么做了）：
+
+```bash
+.venv/bin/python -m pip install --only-binary=:all: \
+    --index-url https://pypi.tuna.tsinghua.edu.cn/simple \
+    "matplotlib==3.7.5" "Pillow==9.5.0" "requests==2.32.3"
+```
+
+Pillow 故意选 **9.5.0** 而不是 10.x：Pillow 10 删掉了 `Image.ANTIALIAS` 这类老 API，
+而 hyperlpr3 还在用，升上去有回归风险。实测升到 9.5.0 后
+`tools/plate_ocr.py --selftest` 仍是 **3/3**。
+
+`tools/setup_vision_env.sh` 结尾的自检已经改成会打印来源目录并对最低版本做判定，
+不达标的直接标 `FAIL`，重建完扫一眼即可。
 
 ## 车牌识别（HyperLPR3）实测结论
 
@@ -143,3 +189,59 @@ TORCH_VER=2.5.1 tools/setup_vision_env.sh --cuda 121
 - [ ] YOLO 训练：红绿灯状态 / 人偶立牌（含类别）/ 车牌框
 - [ ] 合成数据自动标注（从 world 文件读真值，不用手标）
 - [x] 车牌字符识别链路（`tools/plate_ocr.py`，已用合成牌验证 3/3）
+
+## 数据集与已训好的基线（2026-09-23）
+
+**好消息：自动标注是能用的，不需要手标 600 张。**
+
+`tools/gen_vision_dataset.py` 已经把每个目标的像素框写进了 `datasets/vision/meta.jsonl`
+（用 Gazebo 真值位姿做几何投影，带可见度 >=0.6 和小框过滤）。之前以为"自动标签不行"，
+实际是这批框从来没被转成 YOLO 的 `.txt`。转换用：
+
+```bash
+.venv/bin/python tools/meta_to_yolo.py          # -> datasets/vision_yolo/ (软链接, 不复制图片)
+```
+
+按**整段 scenario** 留 val（同一段轨迹相邻帧几乎一样，随机抽帧会让 val 虚高）：
+train 448 张 / 1494 框，val 152 张 / 460 框，**越界 0、丢弃 0**。
+
+标注质量抽查（框边界处的图像梯度 / 全图平均梯度，越大说明框越贴合）：
+
+| 类别 | n | edge score 中位 | 框 w/h 中位 | 说明 |
+|---|---|---|---|---|
+| standee | 1248 | 4.94 | 0.32 | 立牌是竖长条，合理 |
+| non_community | 299 | 6.51 | 0.32 | 同上，最贴合 |
+| plate | 176 | 4.96 | **3.04** | 真实车牌 440/140 = **3.14**，几乎完全吻合 |
+| traffic_light | 231 | 2.30 | 3.70 | 最弱，见下 |
+
+基线训练（`yolov8n` / imgsz 640 / batch 16 / 100 epoch，4060 上 7.8 分钟）：
+
+| 类别 | P | R | mAP50 | mAP50-95 |
+|---|---|---|---|---|
+| **all** | 0.743 | 0.791 | **0.803** | 0.739 |
+| plate | 0.885 | **1.000** | **0.995** | 0.950 |
+| standee | 0.843 | 0.912 | 0.938 | 0.856 |
+| non_community | 0.613 | 0.827 | 0.839 | 0.811 |
+| traffic_light | 0.635 | 0.425 | **0.438** | 0.338 |
+
+推理 2.4 ms/张 @640（约 400 FPS）。权重放在 `weights/aic_vision_yolov8n.pt`（6.2 MB）。
+
+### traffic_light 为什么只有 0.438
+
+不是"目标太小" —— val 里 73 个框**长边全部 > 128 px**，漏检的还都是 279~500 px 的大框。
+真实原因有三个，都在标注定义上：
+
+1. **框太宽**：w/h 中位 3.70，因为框住的是整根横向灯箱（含支架/背板），不是一个灯头。
+   框边界常常落在纯黑背景上而不是物体边缘 —— 上面 edge score 只有 2.30 也印证了这点。
+2. **截断率异常高**：19.9% 的框贴到画面边缘（standee 只有 3.4%、plate 0.0%）。
+   `label_of` 会把越界部分 clamp 到画面内，于是同一类目标在不同帧里框的范围不一致，
+   模型学不稳。
+3. 样本最少：231 框 / 229 帧，基本一帧一个。
+
+可选修法（按性价比）：
+
+- **改标注目标**：不要整根灯箱，改成只框三颗灯珠那一小块（方形、贴合、w/h 接近 1）。
+- **滤掉截断框**：转换时把贴边的框丢掉（`meta_to_yolo.py` 里加个开关即可）。
+- **干脆不用 YOLO 管红绿灯**：`tools/traffic_light.py` 已经是 6/6 通过，红绿灯状态
+  用现有 OpenCV 方案读颜色就够，YOLO 只留车牌/立牌。`docs/vision_plan.md` 里
+  "先用经典 OpenCV 打通闭环" 的路线本来也是这个意思。

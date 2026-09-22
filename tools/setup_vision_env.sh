@@ -206,6 +206,23 @@ echo "==> 把 numpy 钉到 1.24.4 (避免被系统版遮蔽)"
 "$VPY" -m pip install --progress-bar off --only-binary=:all: \
     --index-url "$MIRROR" "numpy==1.24.4" 2>&1 | tail -3
 
+# ★ 同样的遮蔽问题也发生在下面这三个包上 (都是 2026-09 实测):
+#     matplotlib 3.1.2 (系统)  < ultralytics 要求的 >=3.3
+#         -> 后果最严重: ultralytics 画 PR 曲线时调 FontManager.addfont, 3.1.2 没有这个方法,
+#            直接 AttributeError 崩掉。整段训练能跑完、best.pt 也存下来了, 但收尾的
+#            model.val() / yolo val 会崩, 拿不到任何指标图。混淆矩阵那步只是 warning,
+#            PR 曲线那步是硬崩, 所以很容易被当成"训练完了但 val 报错"。
+#     Pillow 7.0.0 (系统)      < ultralytics 要求的 >=7.1.0
+#     requests 2.22.0 (系统)   < ultralytics 要求的 >=2.23.0
+#   Pillow 选 9.5.0 而不是 10.x: Pillow 10 删掉了 Image.ANTIALIAS 等老 API,
+#   hyperlpr3 有回归风险 (它现在还靠这些老 API)。
+#   PyYAML 5.3.1 (系统) 不用动, 它满足 ultralytics 的 >=5.3.1。
+echo "==> 把 matplotlib / Pillow / requests 钉进 venv (避免被系统版遮蔽)"
+for spec in "matplotlib==3.7.5" "Pillow==9.5.0" "requests==2.32.3"; do
+    "$VPY" -m pip install --progress-bar off --only-binary=:all: \
+        --index-url "$MIRROR" "$spec" 2>&1 | tail -2
+done
+
 # ------------------------------------------------- 5. 缓存目录与模型预下载
 CACHE="$ROOT/.cache"
 mkdir -p "$CACHE/ultralytics" "$CACHE/home"
@@ -246,19 +263,67 @@ fi
 echo "================ 自检 ================"
 HOME="$CACHE/home" YOLO_CONFIG_DIR="$CACHE/ultralytics" "$VPY" - <<'PY'
 import importlib
-for name, label in [("torch","PyTorch"), ("torchvision","torchvision"),
-                    ("cv2","OpenCV"), ("numpy","numpy"),
-                    ("ultralytics","ultralytics"), ("hyperlpr3","HyperLPR3")]:
+
+# (import 名, 显示名, 最低版本) —— 最低版本来自 ultralytics 8.4.159 的 requirements。
+# 之所以要连"来自哪个目录"一起打印: 本 venv 是 --system-site-packages, 系统包会遮蔽
+# venv 包, 而 pip 看到系统版"已满足"就不装了。只看版本号看不出这个问题, 看路径才能。
+CHECKS = [
+    ("torch",        "PyTorch",       None),
+    ("torchvision",  "torchvision",   None),
+    ("cv2",          "OpenCV",        None),
+    ("numpy",        "numpy",         "1.23.0"),
+    ("matplotlib",   "matplotlib",    "3.3.0"),
+    ("PIL",          "Pillow",        "7.1.0"),
+    ("requests",     "requests",      "2.23.0"),
+    ("yaml",         "PyYAML",        "5.3.1"),
+    ("ultralytics",  "ultralytics",   None),
+    ("hyperlpr3",    "HyperLPR3",     None),
+]
+
+
+def ver(s):
+    out = []
+    for part in s.split(".")[:3]:
+        num = ""
+        for ch in part:
+            if ch.isdigit():
+                num += ch
+            else:
+                break
+        out.append(int(num or 0))
+    while len(out) < 3:
+        out.append(0)
+    return tuple(out)
+
+
+bad = 0
+for name, label, need in CHECKS:
     try:
         m = importlib.import_module(name)
-        print("  ok   %-13s %s" % (label, getattr(m, "__version__", "")))
     except Exception as e:
-        print("  FAIL %-13s %s" % (label, e))
+        print("  FAIL %-13s 导入失败: %s" % (label, e)); bad += 1; continue
+    v = getattr(m, "__version__", "")
+    f = str(getattr(m, "__file__", ""))
+    where = "venv" if "/.venv/" in f else ("SYSTEM" if "dist-packages" in f else "?")
+    flag = "ok  "
+    if need and ver(v) < ver(need):
+        flag = "FAIL"; bad += 1
+    elif where == "SYSTEM" and need:
+        # 版本够但来自系统: 能用, 但换台机器可能就变旧版, 提醒一句
+        flag = "warn"
+    print("  %s %-13s %-12s (%s)%s" % (
+        flag, label, v, where, "" if not need else "  需要 >=%s" % need))
+
 try:
     import torch
     print("  torch CUDA 可用:", torch.cuda.is_available())
 except Exception:
     pass
+print()
+if bad:
+    print("!! 有 %d 项不达标 —— 重跑本脚本, 或按上面提示单独 pip install 对应版本" % bad)
+else:
+    print("全部达标。")
 PY
 echo
 echo "完成。激活方式:  source .venv/bin/activate"
