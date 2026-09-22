@@ -29,6 +29,7 @@ import time
 from collections import deque
 
 import rospy
+import tf2_ros
 from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import Odometry
 
@@ -51,68 +52,80 @@ def pct(v, p):
 
 
 class Measurer(object):
-    def __init__(self, csv_path=None):
+    """量 AMCL 定位误差。
+
+    ★ issue #7 的教训: **不要**为了"静止时也能采到样本"去改 AMCL 的
+      update_min_d/a (设 0.0 会让粒子集过早收敛, 导航落点系统性偏差 +81%)。
+      正确做法是换个数据源 —— 用 **TF 的 map->base_footprint**:
+      AMCL 持续维护这条变换, 车静止时也有值, 比 /amcl_pose 话题可靠。
+
+    取数方式: /odom_groundtruth (50Hz) 驱动, 每条真值去取一次当前定位位姿,
+    限速到 rate_limit Hz。定位位姿优先 TF, 拿不到才退回最近一条 /amcl_pose。
+    """
+
+    def __init__(self, csv_path=None, rate_limit=10.0):
         self.amcl = None
-        self.truth = None
         self.samples = []         # (t, err_xy, err_yaw_deg)
         self.n_amcl = 0           # 收到多少条 /amcl_pose
-        self.hist = deque(maxlen=4000)   # 真值历史, 用来按时间戳回查
+        self.n_tf = 0             # 有多少条样本来自 TF
+        self.n_truth = 0          # 收到多少条真值
+        self.last_t = 0.0
+        self.rate_limit = rate_limit
+        self.tf = tf2_ros.Buffer(cache_time=rospy.Duration(15.0))
+        self.tf_listener = tf2_ros.TransformListener(self.tf)
         self.csv = open(csv_path, 'w') if csv_path else None
         if self.csv:
-            self.csv.write('t,amcl_x,amcl_y,gt_x,gt_y,err_xy,err_yaw_deg\n')
+            self.csv.write('t,est_x,est_y,gt_x,gt_y,err_xy,err_yaw_deg,src\n')
 
         rospy.Subscriber('/amcl_pose', PoseWithCovarianceStamped, self.cb_amcl, queue_size=20)
         rospy.Subscriber('/odom_groundtruth', Odometry, self.cb_truth, queue_size=50)
 
-    def cb_truth(self, m):
-        p, q = m.pose.pose.position, m.pose.pose.orientation
-        self.hist.append((m.header.stamp.to_sec(), p.x, p.y, yaw_of(q)))
+    def pose_now(self):
+        """当前定位位姿 -> (x, y, yaw, 'tf'|'amcl'); 都拿不到返回 None"""
+        try:
+            tr = self.tf.lookup_transform('map', 'base_footprint',
+                                          rospy.Time(0), rospy.Duration(0.05))
+            p, q = tr.transform.translation, tr.transform.rotation
+            return (p.x, p.y, yaw_of(q), 'tf')
+        except Exception:
+            if self.amcl is not None:
+                return (self.amcl[1], self.amcl[2], self.amcl[3], 'amcl')
+            return None
 
     def cb_amcl(self, m):
-        """每收到一条 AMCL 位姿, 就按**它自己的时间戳**回查真值并比对。
+        p, q = m.pose.pose.position, m.pose.pose.orientation
+        self.amcl = (m.header.stamp.to_sec(), p.x, p.y, yaw_of(q))
+        self.n_amcl += 1        # 只作为兜底/诊断, 不再用它驱动采样
 
-        这样做而不是"拿最新真值比", 是因为 AMCL 可能算得慢、位姿滞后;
-        但比较双方在**同一时刻**的值仍然是公平的 (问的是
-        "AMCL 认为 t 时刻它在哪" vs "t 时刻它真在哪")。
-        原来要求两路时间戳相差 <0.05s, 一卡就丢样本, 已改成时间戳回查。
-        """
+    def cb_truth(self, m):
+        self.n_truth += 1
         p, q = m.pose.pose.position, m.pose.pose.orientation
         t = m.header.stamp.to_sec()
-        self.amcl = (t, p.x, p.y, yaw_of(q))
-        self.n_amcl += 1
-        if not self.hist:
+        if t - self.last_t < 1.0 / self.rate_limit:      # 限速
             return
-        # 找时间戳最接近的真值 (真值按序到达, 线性扫描足够快)
-        best, bestd = None, 1e9
-        for h in reversed(self.hist):
-            d = abs(h[0] - t)
-            if d < bestd:
-                best, bestd = h, d
-            elif d > bestd + 0.05:      # 越走越远, 可以停了
-                break
-        if best is None or bestd > 0.25:   # 差太远就不算 (真值是另一段时间的)
+        est = self.pose_now()
+        if est is None:
             return
-        _, ax, ay, ayaw = self.amcl
-        _, tx, ty, tyaw = best
-        exy = math.hypot(ax - tx, ay - ty)
-        eyaw = math.degrees(wrap(ayaw - tyaw))
+        self.last_t = t
+        if est[3] == 'tf':
+            self.n_tf += 1
+        exy = math.hypot(est[0] - p.x, est[1] - p.y)
+        eyaw = math.degrees(wrap(est[2] - yaw_of(q)))
         self.samples.append((t, exy, eyaw))
         if self.csv:
-            self.csv.write('%.3f,%.4f,%.4f,%.4f,%.4f,%.4f,%.3f\n'
-                           % (t, ax, ay, tx, ty, exy, eyaw))
+            self.csv.write('%.3f,%.4f,%.4f,%.4f,%.4f,%.4f,%.3f,%s\n'
+                           % (t, est[0], est[1], p.x, p.y, exy, eyaw, est[3]))
 
     def report(self):
         d = [s[1] for s in self.samples]
         yaw = [abs(s[2]) for s in self.samples]
         if not d:
-            print('  没采到样本 —— 分话题看:')
-            print('    /amcl_pose        : %s' % ('有数据 (收到 %d 条)' % self.n_amcl
-                                                  if getattr(self, 'n_amcl', 0) else '**一条都没收到**'))
-            print('    /odom_groundtruth : %s' % ('有数据' if getattr(self, 'gt', None)
-                                                  else '**一条都没收到** (仿真没起?)'))
-            print('  常见原因: AMCL 的 update_min_d/update_min_a > 0 时, 车**静止不动就不更新**')
-            print('  滤波器, 于是不发 /amcl_pose —— amcl_params.yaml 里设成 0.0 即可')
-            print('  (本脚本也会在 6 秒后自动原地轻转一下触发更新)')
+            print('  没采到样本 —— 分数据源看:')
+            print('    /odom_groundtruth 收到 %d 条 %s' % (self.n_truth,
+                  '' if self.n_truth else '**一条都没收到 -> 仿真没起?**'))
+            print('    定位位姿源: TF(map->base_footprint) %s; /amcl_pose 收到 %d 条'
+                  % ('可用' if self.n_tf else '不可用', self.n_amcl))
+            print('  正常情况走 TF, 车静止也有值; 若两者都没有, 检查 AMCL 是否起来了')
             return None
         # 去掉开头 3 秒 (AMCL 刚起步粒子云还没收窄)
         t0 = self.samples[0][0]
@@ -124,11 +137,10 @@ class Measurer(object):
         r = dict(n=len(use_d), mean=sum(use_d) / len(use_d),
                  med=pct(use_d, 50), p90=pct(use_d, 90), mx=max(use_d),
                  yaw_med=pct(use_y, 50), yaw_p90=pct(use_y, 90))
-        print('  收到 /amcl_pose %d 条, 成功配对 %d 条, 跨度 %.1f s'
-              % (self.n_amcl, len(use_d), span))
-        print('  定位更新率 %.2f Hz   (配对成功率 %.0f%%)'
-              % (len(use_d) / span if span > 0 else 0,
-                 100.0 * len(self.samples) / max(1, self.n_amcl)))
+        print('  真值 %d 条, 成功配对 %d 条, 跨度 %.1f s   (定位源: TF %d / /amcl_pose %d)'
+              % (self.n_truth, len(use_d), span,
+                 self.n_tf, len(self.samples) - self.n_tf))
+        print('  采样率 %.2f Hz' % (len(use_d) / span if span > 0 else 0))
         print('  位置误差  中位 %.4f m   均值 %.4f m   P90 %.4f m   最大 %.4f m'
               % (r['med'], r['mean'], r['p90'], r['mx']))
         print('  朝向误差  中位 %.2f deg  P90 %.2f deg' % (r['yaw_med'], r['yaw_p90']))
@@ -144,9 +156,8 @@ def main():
     rospy.init_node('check_localization', anonymous=True)
     m = Measurer(a.csv)
     print('开始测量 ...')
-    # ★ issue #3 兜底: AMCL 只在"车动了"或"每帧更新"时才发 /amcl_pose。
-    #   万一配置又被改回 update_min_d>0, 静止时就会一条样本都收不到 ——
-    #   这里等 6 秒还没样本就自己原地轻转一下, 触发几次滤波器更新。
+    # ★ issue #3 兜底 (现在走 TF, 基本用不到): 万一 TF 也拿不到 (AMCL 没起来),
+    #   等 6 秒还没样本就自己原地轻转一下, 逼 AMCL 动起来。
     nudge = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
     need_nudge = True
     try:

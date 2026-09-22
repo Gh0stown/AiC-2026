@@ -190,6 +190,7 @@ python3 tools/gen_recognition_points.py && python3 tools/gen_recognition_route.p
 
 1. `./tools/acceptance.sh`（**完整跑一遍**）—— 沙箱里 6 项是逐项验证的，
    整条串联没跑完过（沙箱会杀超过 ~10 分钟的任务）。
+   ★ 现在验收跑的是**最终路线** `recognition_route.yaml`（17 站 + 倒车入库）。
 2. **人眼看一遍视觉质量**：`roslaunch competition_robot robot_gazebo.launch` 之后
    看 Gazebo 里——立牌朝向/贴图、车牌可读、红绿灯三颗透镜（亮的只有一颗）。
    沙箱里没有 GPU，相机画面只能靠抓帧反推。
