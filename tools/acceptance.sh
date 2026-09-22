@@ -220,7 +220,7 @@ grep -E "位置误差|朝向误差" "$LOGD/check3.txt" | sed 's/^/      /'
 hdr "4/6 雷达位姿标定"
 timeout 150 python3 tools/check_laser_pose.py > "$LOGD/check4.txt" 2>&1
 grep -E "^\(" "$LOGD/check4.txt" | tail -4 | sed 's/^/      /'
-LR=$(grep -oE "[0-9]+\.[0-9]+ mm / [0-9]+\.[0-9]+ mm" "$LOGD/check4.txt" | tail -1)
+LR=$(grep -oE "[0-9]+\.[0-9]+ mm */ *[0-9]+\.[0-9]+ mm" "$LOGD/check4.txt" | tail -1)
 if [ -n "${LR:-}" ]; then
   LM=$(echo "$LR" | grep -oE "^[0-9]+\.[0-9]+")
   if python3 -c "import sys; sys.exit(0 if $LM < 15 else 1)"; then
