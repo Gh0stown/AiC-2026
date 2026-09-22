@@ -461,17 +461,31 @@ def capture(args, poses, out_dir):
             print('  %d/%d (跳过 %d)' % (done, len(poses), skipped))
     meta.close()
     if args.with_labels:
-        write_data_yaml(out_dir)
+        write_data_yaml(out_dir, args.split)
     print('完成: 存了 %d 张, 跳过 %d 张 -> %s' % (done, skipped, out_dir))
     return 0
 
 
-def write_data_yaml(out_dir):
+def write_data_yaml(out_dir, split=False):
+    """写 YOLO 的 data.yaml。
+
+    ★ 路径必须跟**实际布局**一致: 不加 --split 时图片是平铺在 images/ 下的
+      (--split 的 help 里也写了"默认平铺, 方便导进标注工具"), 此时 images/train
+      和 images/val 根本不存在。原来这里恒定写 train/val 子目录, 于是平铺数据集
+      拿去训练会直接报找不到图片。
+    """
     p = os.path.join(out_dir, 'data.yaml')
     with open(p, 'w') as f:
         f.write('# YOLO 数据集 (由 tools/gen_vision_dataset.py 合成生成)\n')
         f.write('path: %s\n' % os.path.abspath(out_dir))
-        f.write('train: images/train\nval: images/val\n')
+        if split:
+            f.write('train: images/train\nval: images/val\n')
+        else:
+            # 平铺: train 和 val 都指向 images/。真正训练前请自己按场景切分
+            # (约定: val 用没见过的点位, 见 --val-points), 或者重新生成时加 --split。
+            f.write('# 平铺布局(未用 --split): train/val 都指向 images/\n')
+            f.write('# 训练前请按场景自行切分, 或用 --split 重新生成\n')
+            f.write('train: images\nval: images\n')
         f.write('nc: %d\nnames: %s\n' % (len(CLASSES), CLASSES))
     return p
 
