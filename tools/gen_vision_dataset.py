@@ -198,7 +198,8 @@ def load_points():
     """
     d = yaml.safe_load(open(os.path.join(G.ROBOT, 'config', 'recognition_points.yaml')))
     return [(p['name'], float(p['pose'][0]), float(p['pose'][1]),
-             float(p['pose'][2])) for p in d['points']]
+             float(p['pose'][2]), float(p.get('shot_distance_m', 0.5)))
+            for p in d['points']]
 
 
 def in_road_free(x, y, rob, blocks):
@@ -214,8 +215,34 @@ def in_road_free(x, y, rob, blocks):
     return True
 
 
-def sample_poses(n, rob, blocks, args):
-    """-> [(scenario, mode, x, y, yaw)]"""
+def jitter_of(args, shot_d):
+    """抖动幅度 (位置米数, 朝向度数)。
+
+    ★ issue #8: 抖动必须**随拍摄距离缩放**, 不能全局固定 ——
+      立牌点位 0.5m、红绿灯 1.0m 差一倍, 固定 25° 会让 0.5m 处的目标横移
+      0.23m ≈ 3.5 个立牌宽, 直接出画 (实测只有 62% 的 points 帧拍到目标)。
+      默认 `--points-jitter 0.20` / `--points-yaw 0.20` 都当**比例**:
+        位置 ±0.20*距离 (立牌 0.10m / 车 0.14m / 灯 0.20m)
+        朝向 ±atan(0.20)=11.3° (固定角度 -> 横移量天然是距离的 20%)
+      要老的绝对语义就加 `--jitter-abs`。
+    """
+    if args.jitter_abs:
+        return args.points_jitter, args.points_yaw
+    return (args.points_jitter * shot_d,
+            math.degrees(math.atan(args.points_yaw)))
+
+
+def target_visible(scenario, objects, x, y, yaw, rob, args):
+    """这帧里有没有 scenario 对应的目标 (名字以 scenario 开头)"""
+    for o in objects:
+        if o['name'].startswith(scenario) and \
+                label_of(o, x, y, yaw, rob, args.min_box_px, args.min_visible):
+            return True
+    return False
+
+
+def sample_poses(n, rob, blocks, args, objects):
+    """-> [(scenario, mode, x, y, yaw, shot_d)]"""
     rng = random.Random(args.seed)
     pts = [p for p in load_points() if p[0] in args.points.split(',')] if args.points else load_points()
     mix = dict((k, float(v)) for k, v in (kv.split(':') for kv in args.mode_mix.split(',')))
@@ -223,13 +250,51 @@ def sample_poses(n, rob, blocks, args):
     for mode, frac in mix.items():
         k = int(round(n * frac))
         if mode == 'points':
-            for i in range(k):
-                name, px, py, pyaw = pts[i % len(pts)]
-                j = args.points_jitter
-                out.append((name, mode,
-                            px + rng.uniform(-j, j), py + rng.uniform(-j, j),
-                            pyaw + math.radians(rng.uniform(-args.points_yaw, args.points_yaw))))
+            # ★ 每个点位采 k/len(pts) 张, 抖动按距离缩放; 目标必须在画面里
+            #   (拍不到就重抽, 抽不到就用点位本身) —— 这样 scenario 字段才可信,
+            #   "按点位评估"才有意义 (issue #8)。
+            per = max(1, k // max(1, len(pts)))
+            for name, px, py, pyaw, shot_d in pts:
+                jm, jd = jitter_of(args, shot_d)
+                for _ in range(per):
+                    got = None
+                    for _try in range(80):
+                        x = px + rng.uniform(-jm, jm)
+                        y = py + rng.uniform(-jm, jm)
+                        yaw = pyaw + math.radians(rng.uniform(-jd, jd))
+                        if not in_road_free(x, y, rob, blocks):
+                            continue
+                        if args.require_target and not target_visible(
+                                name, objects, x, y, yaw, rob, args):
+                            continue
+                        got = (x, y, yaw)
+                        break
+                    if got is None:                       # 兜底: 用点位本身
+                        if not in_road_free(px, py, rob, blocks):
+                            continue
+                        got = (px, py, pyaw)
+                    out.append((name, mode, got[0], got[1], got[2], shot_d))
+        elif mode == 'near':
+            # 在某个物体周围 0.4~2.5m 处随机取位姿, 朝向它; 看不到就重抽。
+            # (issue #8 附带发现①: 纯 random 大部分帧是背景, 白占预算)
+            got = 0
+            guard = 0
+            while got < k and guard < k * 400:
+                guard += 1
+                o = rng.choice(objects)
+                ox, oy = float(np.mean([q[0] for q in o['pts']])), float(np.mean([q[1] for q in o['pts']]))
+                d = rng.uniform(0.4, 2.5)
+                a = rng.uniform(-math.pi, math.pi)
+                x, y = ox + d * math.cos(a), oy + d * math.sin(a)
+                yaw = math.atan2(oy - y, ox - x) + rng.uniform(-0.5, 0.5)
+                if not in_road_free(x, y, rob, blocks):
+                    continue
+                if not target_visible(o['name'], objects, x, y, yaw, rob, args):
+                    continue
+                out.append(('near_' + o['name'], mode, x, y, yaw, d))
+                got += 1
         else:
+            # background/neg: 画面里不能有任何目标 (负样本, 压误检)
             got = 0
             guard = 0
             while got < k and guard < k * 400:
@@ -239,12 +304,10 @@ def sample_poses(n, rob, blocks, args):
                 yaw = rng.uniform(-math.pi, math.pi)
                 if not in_road_free(x, y, rob, blocks):
                     continue
-                if mode == 'neg':
-                    # 空帧: 画面里不能有目标
-                    objs = build_objects()
-                    if any(label_of(o, x, y, yaw, rob) for o in objs):
-                        continue
-                out.append(('random' if mode != 'neg' else 'neg', mode, x, y, yaw))
+                if any(label_of(o, x, y, yaw, rob, args.min_box_px, args.min_visible)
+                       for o in objects):
+                    continue
+                out.append(('background', 'neg', x, y, yaw, 0.0))
                 got += 1
     rng.shuffle(out)
     return out
@@ -321,7 +384,7 @@ def capture(args, poses, out_dir):
     print('开始采集 %d 张 -> %s   (%s)'
           % (len(poses), out_dir, '含 YOLO 框' if args.with_labels else '只出图, 平铺'))
     done = skipped = 0
-    for idx, (scenario, mode, x, y, yaw) in enumerate(poses):
+    for idx, (scenario, mode, x, y, yaw, _shot_d) in enumerate(poses):
         # --- 传送 ---
         ms = ModelState()
         ms.model_name = args.robot_model
@@ -419,10 +482,19 @@ def main():
     ap.add_argument('--n', type=int, default=200,
                     help='目标图片数 (固定场景 200 张就够; 要练大模型再加)')
     ap.add_argument('--out', default='datasets/vision')
-    ap.add_argument('--mode-mix', default='points:0.6,random:0.3,neg:0.1')
+    ap.add_argument('--mode-mix', default='points:0.6,near:0.3,neg:0.1',
+                    help='points(识别点位抖动) / near(物体附近随机) / neg(空帧) / '
+                         'random(全图随机, 大多拍不到目标)')
     ap.add_argument('--points', default='', help='只用这些识别点位 (逗号分隔), 空=全部')
-    ap.add_argument('--points-jitter', type=float, default=0.30, help='点位抖动 (m)')
-    ap.add_argument('--points-yaw', type=float, default=25.0, help='点位朝向抖动 (deg)')
+    ap.add_argument('--points-jitter', type=float, default=0.20,
+                    help='点位位置抖动: 默认是**拍摄距离的比例** (0.20=20%%)')
+    ap.add_argument('--points-yaw', type=float, default=0.20,
+                    help='点位朝向抖动: 默认是比例, 换算 ±atan(0.20)=11.3°')
+    ap.add_argument('--jitter-abs', action='store_true',
+                    help='把上面两个当绝对值用 (米 / 度), 即 issue #8 之前的旧语义')
+    ap.add_argument('--keep-off-target', dest='require_target', action='store_false',
+                    help='允许 points 模式下"目标不在画面里"的帧 (默认不允许, '
+                         '保证 scenario 字段可信)')
     ap.add_argument('--min-box-px', type=float, default=20.0)
     ap.add_argument('--min-visible', type=float, default=0.6, help='框内角点比例下限')
     ap.add_argument('--val-frac', type=float, default=0.15)
@@ -443,12 +515,12 @@ def main():
     global ROBOT
     ROBOT = G.load_robot()
     blocks = G.load_blocks()
-    poses = sample_poses(args.n, ROBOT, blocks, args)
+    objects = build_objects()
+    poses = sample_poses(args.n, ROBOT, blocks, args, objects)
     args.val_points_set = set(x.strip() for x in args.val_points.split(',') if x.strip())
     tr, val = split_train_val(poses, args.val_frac, args.val_points_set)
 
     if args.dry_run:
-        objects = build_objects()
         print('相机 %dx%d  fx=%.1f  安装 z=%.3f  近裁剪 %.2f m'
               % (ROBOT['W'], ROBOT['H'], ROBOT['fx'], ROBOT['mount'][2], CAM_Z_MIN))
         print('物体 %d 个: %s' % (len(objects), ', '.join(
@@ -457,7 +529,7 @@ def main():
         cnt = {c: 0 for c in CLASSES}
         sizes = {c: [] for c in CLASSES}
         miss = 0
-        for scenario, mode, x, y, yaw in poses[:400]:
+        for scenario, mode, x, y, yaw, _d in poses[:400]:
             ls = [label_of(o, x, y, yaw, ROBOT, args.min_box_px, args.min_visible)
                   for o in objects]
             ls = [l for l in ls if l]
@@ -473,6 +545,38 @@ def main():
             print('  %-14s %5d 个框   中位边长 %s px' % (
                 c, cnt[c], ('%.0f' % np.median(s)) if s else '-'))
         print('  空帧 %d/%d' % (miss, k))
+        # ★ issue #8: 每个点位的"目标命中率" —— points 模式下应当接近 100%
+        hit = {}
+        for scenario, mode, x, y, yaw, _d in poses[:400]:
+            if mode != 'points':
+                continue
+            h = target_visible(scenario, objects, x, y, yaw, ROBOT, args)
+            a, b = hit.get(scenario, (0, 0))
+            hit[scenario] = (a + (1 if h else 0), b + 1)
+        if hit:
+            print('\npoints 模式各点位"目标在画面里"的比例 (issue #8):')
+            tot = [0, 0]
+            for kk in sorted(hit):
+                a, b = hit[kk]
+                tot[0] += a
+                tot[1] += b
+                print('  %-10s %d/%d' % (kk, a, b))
+            pct = 100.0 * tot[0] / max(1, tot[1])
+            print('  合计 %d/%d = %.0f%%' % (tot[0], tot[1], pct))
+            if pct < 99.0:
+                print('  ⚠ 有目标不在画面里的帧 —— scenario 字段会误导按点位评估')
+            # 实际达成的抖动幅度 (抖动是"上限", 目标必须可见 -> 实际会小一些)
+            nom = {p[0]: p for p in load_points()}
+            dd, aa = [], []
+            for scenario, mode, x, y, yaw, _d in poses:
+                if mode != 'points' or scenario not in nom:
+                    continue
+                _, px, py, pyaw, _sd = nom[scenario]
+                dd.append(math.hypot(x - px, y - py))
+                aa.append(abs(math.degrees(float(G.wrap(yaw - pyaw)))))
+            if dd:
+                print('  实际达成幅度: 位移中位 %.3f m (最大 %.3f) / 朝向中位 %.1f° (最大 %.1f)'
+                      % (float(np.median(dd)), max(dd), float(np.median(aa)), max(aa)))
         return 0
 
     os.makedirs(args.out, exist_ok=True)
