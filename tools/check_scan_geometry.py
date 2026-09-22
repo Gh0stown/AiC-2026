@@ -6,7 +6,7 @@ import tf
 from sensor_msgs.msg import LaserScan
 
 # 场地内沿
-WX, WY = 2.076, 2.076
+WX, WY = 2.176, 2.176
 # 车在 (1.772, 1.782), yaw=pi; 雷达相对 base_link (0.134, 0, 0.20)
 bx, by, byaw = 1.772, 1.782, math.pi
 lx = bx + 0.134 * math.cos(byaw)

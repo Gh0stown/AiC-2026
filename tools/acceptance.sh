@@ -261,11 +261,26 @@ print('有' if d.get('reverse_park') else '无')
     N=$(grep -oE "[0-9]+/$TOT 个航点" "$LOGD/check5.txt" | tail -1)
     bad "巡航: ${N:-没跑完} (见 $LOGD/check5.txt)"
   fi
+  # ★ 一条判定同时报"有没有入位"和"真值精度"（门槛 3 cm）。
+  #   patrol.py 打印: [park] 对真值: 位置 0.0120 m, 朝向 0.44 deg  ✓ 入位
+  #   旧版这里被拆成两处判定, 且精度门槛 grep 的是早已不存在的
+  #   "倒车入库 位置误差 x.xx cm" 格式, 永远匹配不上、只打一句"没跑" —— 见 issue #7
   if [ "$NPARK" = "有" ]; then
-    if grep -qE "入位" "$LOGD/check5.txt"; then
-      ok "倒车入库: 已入位"
-    else
+    if ! grep -qE "入位" "$LOGD/check5.txt"; then
       bad "倒车入库: 没看到入位结果 (见 $LOGD/check5.txt)"
+    else
+      PARKL=$(grep -oE "对真值: 位置 [0-9.]+ m, 朝向 [0-9.]+ deg" "$LOGD/check5.txt" | tail -1)
+      if [ -n "${PARKL:-}" ]; then
+        PM=$(echo "$PARKL" | sed -n 's/.*位置 \([0-9.]*\) m.*/\1/p')
+        PY=$(echo "$PARKL" | sed -n 's/.*朝向 \([0-9.]*\) deg.*/\1/p')
+        if python3 -c "import sys; sys.exit(0 if $PM < 0.03 else 1)"; then
+          ok "倒车入库: 已入位, 真值位置误差 ${PM} m / 朝向 ${PY}° (< 3 cm)"
+        else
+          bad "倒车入库: 已入位但精度不足, 真值位置误差 ${PM} m (>= 3 cm)"
+        fi
+      else
+        ok "倒车入库: 已入位 (没解析到真值误差行)"
+      fi
     fi
   fi
   # 车道合规: 轨迹有没有进 A/B 街区
@@ -284,19 +299,6 @@ PY
     else
       bad "车道合规: 有 $VIOL 帧闯进街区"
     fi
-  fi
-  # 倒车入库的精度行形如 "✓ 倒车入库  位置误差 x.xx cm  角度 ..."
-  PARK=$(grep -E "倒车入库.*(误差|cm)" "$LOGD/check5.txt" | grep -vE "←|容差|dry" | tail -1)
-  if [ -n "${PARK:-}" ]; then
-    echo "      $PARK"
-    PC=$(echo "$PARK" | grep -oE "[0-9]+\.[0-9]+ *cm" | head -1 | grep -oE "[0-9]+\.[0-9]+")
-    if [ -n "${PC:-}" ] && python3 -c "import sys; sys.exit(0 if $PC < 3.0 else 1)"; then
-      ok "倒车入库: 位置误差 ${PC} cm (< 3 cm)"
-    else
-      bad "倒车入库: 位置误差 ${PC:-?} cm"
-    fi
-  else
-    note "倒车入库: 没跑 (巡航没成功就不会入库), 见 $LOGD/check5.txt"
   fi
 fi
 

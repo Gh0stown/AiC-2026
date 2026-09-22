@@ -133,7 +133,7 @@ class Patrol(object):
         a = sum((V[i] - mv) * (U[i] - mu) for i in range(n)) / svv
         return (a, mu - a * mv)
 
-    def laser_wall_pose(self, inner=2.076, band=0.40, max_iter=3, min_pts=10):
+    def laser_wall_pose(self, inner=2.176, band=0.40, max_iter=3, min_pts=10):
         """用 2D 雷达"对墙"求一个**绝对**位姿 (只在墙边/角落有效)。
 
         思路: 地图已知墙在 ±inner。把扫描点按当前位姿投到 map 系后, 贴近墙面的

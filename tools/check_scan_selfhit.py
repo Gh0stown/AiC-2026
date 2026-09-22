@@ -22,7 +22,7 @@ import rospy
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
 
-WX, WY = 2.076, 2.076        # 场地内沿
+WX, WY = 2.176, 2.176        # 场地内沿
 
 
 def yaw_of(q):
