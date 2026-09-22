@@ -6,6 +6,13 @@
 #   tools/setup_vision_env.sh --cuda 121   # GPU 版 torch (CUDA 12.1, 搬到显卡机时用)
 #   tools/setup_vision_env.sh --recreate   # 先删掉已有 .venv 再重建
 #
+# 可覆盖的环境变量:
+#   TORCH_BASE       索引页与 wheel 的根 (默认 https://download.pytorch.org/whl)
+#   TORCH_FILE_BASE  只把 **wheel 文件** 换成国内镜像 (索引页仍走 TORCH_BASE)
+#                    例: TORCH_FILE_BASE=https://mirrors.aliyun.com/pytorch-wheels
+#   MIRROR           pip 镜像 (默认清华)
+#   TORCH_VER        torch 版本 (默认 2.4.1, Python 3.8 的最后一版)
+#
 # 环境说明:
 #   * 虚拟环境放在仓库根的 .venv/ (已 gitignore), 不写 $HOME, 不需要 sudo
 #   * 若检测到 /opt/ros 则带 --system-site-packages, 让 rospy/cv_bridge 可见
@@ -16,6 +23,8 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 
 MIRROR="${MIRROR:-https://pypi.tuna.tsinghua.edu.cn/simple}"
+TORCH_BASE="${TORCH_BASE:-https://download.pytorch.org/whl}"
+TORCH_FILE_BASE="${TORCH_FILE_BASE:-}"
 TORCH_VER="${TORCH_VER:-2.4.1}"          # 2.4.1 是支持 Python 3.8 的最后一版
 CUDA=""
 RECREATE=0
@@ -101,12 +110,12 @@ echo "==> $("$VPY" -m pip --version)"
 if [ -n "$CUDA" ]; then
     TORCH_CHANNEL="cu${CUDA}"
     TORCH_SPEC="torch==${TORCH_VER}+${TORCH_CHANNEL}"
-    TORCH_INDEX="https://download.pytorch.org/whl/${TORCH_CHANNEL}"
+    TORCH_INDEX="${TORCH_BASE}/${TORCH_CHANNEL}"
     echo "==> 安装 GPU 版 torch (CUDA ${CUDA})"
 else
     TORCH_CHANNEL="cpu"
     TORCH_SPEC="torch==${TORCH_VER}+cpu"
-    TORCH_INDEX="https://download.pytorch.org/whl/cpu"
+    TORCH_INDEX="${TORCH_BASE}/cpu"
     echo "==> 安装 CPU 版 torch"
 fi
 
@@ -116,10 +125,10 @@ fi
 #   2) 下到本地后进度可见, 中断可重来
 # 依赖(filelock/sympy/...)仍从镜像取, 所以不加 --no-index。
 mkdir -p "$VENV/wheels"
-"$VPY" - "$TORCH_INDEX" "$TORCH_VER" "$TORCH_CHANNEL" "$VENV/wheels" <<'PY'
-import os, re, sys, time, urllib.request, urllib.parse
+"$VPY" - "$TORCH_INDEX" "$TORCH_VER" "$TORCH_CHANNEL" "$VENV/wheels" "$TORCH_FILE_BASE" <<'PY'
+import os, re, sys, time, zipfile, urllib.request, urllib.parse
 
-index, want_ver, channel, outdir = sys.argv[1:5]
+index, want_ver, channel, outdir, filebase = sys.argv[1:6]
 py = "cp%d%d" % sys.version_info[:2]
 
 def vkey(name):
@@ -128,7 +137,13 @@ def vkey(name):
 
 for pkg in ("torch", "torchvision"):
     html = urllib.request.urlopen("%s/%s/" % (index, pkg), timeout=60).read().decode("utf-8", "replace")
-    hits = set(re.findall(r'href="(https://[^"#]+' + pkg + r'-[^"#]*' + py + r'[^"#]*\.whl)', html))
+    # ★ 必须一起过滤**平台标签** —— 索引页里同一版本同时有 linux_x86_64 和
+    #   win_amd64, 而 hits 是 set, 迭代顺序不确定, 只按版本排序会**随机选中平台**
+    #   (踩过: 下到过 torch-2.4.1+cu121-cp38-cp38-win_amd64.whl)。
+    plat = "win_amd64" if sys.platform.startswith("win") else (
+           "macosx" if sys.platform == "darwin" else "linux_x86_64")
+    hits = set(re.findall(r'href="(https://[^"#]+' + pkg + r'-[^"#]*' + py
+                          + r'[^"#]*' + plat + r'[^"#]*\.whl)', html))
     if not hits:
         sys.exit("   找不到 %s 的 %s wheel (通道 %s)" % (pkg, py, channel))
     if pkg == "torch":
@@ -137,19 +152,33 @@ for pkg in ("torch", "torchvision"):
             hits = set(pinned)
     url = sorted(hits, key=lambda h: vkey(urllib.parse.unquote(h.split('/')[-1])))[-1]
     url = url.replace("download-r2.pytorch.org", "download.pytorch.org")
+    if filebase:                      # 可选: wheel 文件走国内镜像 (索引页不变)
+        url = re.sub(r'^https://[^/]+/whl/', filebase.rstrip('/') + '/', url)
     out = os.path.join(outdir, urllib.parse.unquote(url.split("/")[-1]))
-    if os.path.exists(out) and os.path.getsize(out) > 1_000_000:
+    # ★ 只判"文件 > 1MB"是不够的 —— 下载中断留下的残file同样满足, 会被当成
+    #   完整的 wheel 交给 pip, 然后报一堆看不懂的解压错误。wheel 本质是 zip,
+    #   直接校验它是不是合法 zip。
+    if os.path.exists(out) and os.path.getsize(out) > 1_000_000 \
+            and zipfile.is_zipfile(out):
         print("   [跳过] %s (%.1f MB)" % (os.path.basename(out), os.path.getsize(out) / 1e6))
         continue
     print("   [下载] %s" % os.path.basename(out))
     t0 = time.time()
     with urllib.request.urlopen(url, timeout=180) as r, open(out, "wb") as f:
+        expect = int(r.headers.get("Content-Length") or 0)
         while True:
             c = r.read(1 << 20)
             if not c:
                 break
             f.write(c)
-    print("      %.1f MB / %.0fs" % (os.path.getsize(out) / 1e6, time.time() - t0))
+    got = os.path.getsize(out)
+    if (expect and got != expect) or not zipfile.is_zipfile(out):
+        try:
+            os.remove(out)
+        except OSError:
+            pass
+        sys.exit("     下载不完整 (%d/%d 字节), 已删除, 请重跑" % (got, expect))
+    print("      %.1f MB / %.0fs" % (got / 1e6, time.time() - t0))
 PY
 
 # shellcheck disable=SC2086
@@ -165,6 +194,17 @@ echo "==> 安装 ultralytics / OpenCV (清华镜像)"
 echo "==> 安装 HyperLPR3 (中文车牌识别)"
 "$VPY" -m pip install --progress-bar off --index-url "$MIRROR" hyperlpr3 \
     || echo "   ! HyperLPR3 安装失败, 稍后可单独重试 (不影响 YOLO)"
+
+# ★ numpy 必须钉版本装进 venv。
+#   本脚本用 --system-site-packages (为了让 rospy/cv_bridge 可见), 于是系统自带的
+#   numpy 1.17.4 会遮蔽 venv —— pip 看到 "Requirement already satisfied" 就不装了。
+#   后果 (实测): cv2 报 "module compiled against API version 0xe but this version
+#   of numpy is 0xd", pandas 报 "numpy.random has no attribute BitGenerator",
+#   ultralytics 要求的 numpy>=1.23 也不满足。
+#   1.24.4 是 Python 3.8 上最后一个 numpy, 同时满足 cv2/ultralytics/scipy/onnxruntime。
+echo "==> 把 numpy 钉到 1.24.4 (避免被系统版遮蔽)"
+"$VPY" -m pip install --progress-bar off --only-binary=:all: \
+    --index-url "$MIRROR" "numpy==1.24.4" 2>&1 | tail -3
 
 # ------------------------------------------------- 5. 缓存目录与模型预下载
 CACHE="$ROOT/.cache"
@@ -185,6 +225,24 @@ fi
 
 # ---------------------------------------------------------------- 6. 自检
 echo
+# ★ 中文字体: plate_ocr.py --selftest 要用 PIL 合成一张蓝牌, 它按顺序找
+#   NotoSansCJK-Bold.ttc / DroidSansFallbackFull.ttf / uming.ttc。
+#   注意 fonts-droid-fallback 提供的是 **CJK 回退字体, 没有拉丁字形** ——
+#   装它的话数字/字母会渲染成空心方框, OCR 自检会变成 0/3 (踩过)。
+#   要装 fonts-noto-cjk (提供首个候选)。
+FONT_OK=0
+for f in /usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc \
+         /usr/share/fonts/truetype/arphic/uming.ttc; do
+    [ -f "$f" ] && FONT_OK=1 && break
+done
+if [ "$FONT_OK" = 1 ]; then
+    echo "==> 中文字体: OK"
+else
+    echo "==> 中文字体: !! 缺失 —— plate_ocr.py --selftest 会失败"
+    echo "    需要 root 装一次:  sudo apt install -y fonts-noto-cjk"
+    echo "    注意别只装 fonts-droid-fallback: 它没有拉丁字形, 数字/字母会变方框"
+fi
+
 echo "================ 自检 ================"
 HOME="$CACHE/home" YOLO_CONFIG_DIR="$CACHE/ultralytics" "$VPY" - <<'PY'
 import importlib
