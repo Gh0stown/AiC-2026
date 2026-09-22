@@ -80,50 +80,69 @@ hdr()  { echo; echo "── $1 ────────────────�
 hdr "启动仿真"
 GUI_ARG="gui:=false"; RV_ARG="rviz:=false"
 $GUI && { GUI_ARG="gui:=true"; RV_ARG="rviz:=true"; }
-roslaunch competition_robot navigation.launch $GUI_ARG $RV_ARG \
-    > "$LOGD/sim.log" 2>&1 &
-SIM_PID=$!
-echo "  roslaunch PID=$SIM_PID, 日志 $LOGD/sim.log"
 
-for i in $(seq 1 90); do
-  rosnode list 2>/dev/null | grep -q "^/move_base$" && break
-  kill -0 "$SIM_PID" 2>/dev/null || { echo "!! roslaunch 提前退出, 看 $LOGD/sim.log"; exit 1; }
-  sleep 2
-done
-if ! rosnode list 2>/dev/null | grep -q "^/move_base$"; then
-  echo "!! 90 次轮询后 move_base 还没起来"; exit 1
-fi
-# ★ 还要等 Gazebo 的 ROS 服务就绪 —— 只看 move_base 会跑太早。
-#   gzserver 偶尔会段错误 (沙箱里遇到过), 这里会及早发现并明确报出来。
-# 用**真正调一次服务**来探测 (比 grep rosservice list 可靠)
-GAZ=0
-for i in $(seq 1 60); do
-  if timeout 12 python3 -c "
+# ★ gzserver 在无 GPU 环境会**偶发段错误** (见文件末尾故障表)。
+#   原来一崩整轮就失败、得手工重跑; 现在自动重试最多 3 次 ——
+#   注意要判**两件事**: ① move_base 起来 ② Gazebo 的 ROS 服务真就绪。
+#   (只判 ① 不够: 实测遇到过 move_base 起来了、gzserver 随后才段错误)
+SIM_PID=""
+SIM_OK=false
+for attempt in 1 2 3; do
+  echo "  第 $attempt 次启动..."
+  roslaunch competition_robot navigation.launch $GUI_ARG $RV_ARG \
+      > "$LOGD/sim.log" 2>&1 &
+  SIM_PID=$!
+
+  # ① move_base  (★ 每轮都查"进程还在不在 / 日志有没有崩溃", 崩了就立刻换下一次,
+  #    否则会白等到超时 —— 原来 90 轮 x 2s 太慢)
+  up=false
+  for i in $(seq 1 60); do
+    rosnode list 2>/dev/null | grep -q "^/move_base$" && { up=true; break; }
+    kill -0 "$SIM_PID" 2>/dev/null || break
+    grep -qE "Segmentation|exit code 139" "$LOGD/sim.log" 2>/dev/null && break
+    sleep 2
+  done
+
+  # ② 真正调一次 Gazebo 服务来探测 (比 grep rosservice list 可靠)
+  #    同样快速失败: 探测 6s 超时 + 每轮查节点/日志
+  if $up; then
+    for i in $(seq 1 20); do
+      if timeout 6 python3 -c "
 import rospy
 from gazebo_msgs.srv import GetWorldProperties
 rospy.init_node('acc_probe', anonymous=True, disable_signals=True)
 try:
     s = rospy.ServiceProxy('/gazebo/get_world_properties', GetWorldProperties)
-    s.wait_for_service(timeout=8)
-    n = len(s().model_names)
-    raise SystemExit(0 if n > 0 else 1)
+    s.wait_for_service(timeout=4)
+    raise SystemExit(0 if len(s().model_names) > 0 else 1)
 except Exception:
     raise SystemExit(1)
-" >/dev/null 2>&1; then GAZ=1; break; fi
-  if ! rosnode list 2>/dev/null | grep -q "^/gazebo$"; then
-    echo "!! gzserver 挂了 (段错误?), 见 $LOGD/sim.log"
-    echo "   sim.log 里的崩溃行:"; grep -E "Segmentation|exit code 139|process has died" "$LOGD/sim.log" | tail -3 | sed 's/^/     /'
-    exit 1
+" >/dev/null 2>&1; then SIM_OK=true; break; fi
+      kill -0 "$SIM_PID" 2>/dev/null || break
+      rosnode list 2>/dev/null | grep -q "^/gazebo$" || break
+      grep -qE "Segmentation|exit code 139" "$LOGD/sim.log" 2>/dev/null && break
+      sleep 2
+    done
   fi
-  sleep 2
+
+  $SIM_OK && break
+  echo "  第 $attempt 次没起来 (gzserver 段错误?), 清理重试"
+  grep -E "Segmentation|exit code 139|process has died" "$LOGD/sim.log" | tail -2 | sed 's/^/     /'
+  kill -9 "$SIM_PID" 2>/dev/null
+  pkill -9 -f "[g]zserver" 2>/dev/null
+  pkill -9 -f "[r]osmaster" 2>/dev/null
+  sleep 5
+  SIM_PID=""
 done
-if [ "$GAZ" != "1" ]; then
-  echo "!! Gazebo 服务一直没就绪"
+if ! $SIM_OK; then
+  echo "!! 三次都没把仿真+Gazebo 拉起来, 看 $LOGD/sim.log"
   echo "   /gazebo 节点: $(rosnode list 2>/dev/null | grep -c '^/gazebo$')"
   echo "   gazebo 服务数: $(timeout 8 rosservice list 2>/dev/null | grep -c '/gazebo/')"
   grep -E "Segmentation|exit code 139|process has died" "$LOGD/sim.log" | tail -3 | sed 's/^/     /'
   exit 1
 fi
+echo "  roslaunch PID=$SIM_PID, 日志 $LOGD/sim.log"
+
 # 等 AMCL 出第一帧
 for i in $(seq 1 45); do
   timeout 3 rostopic echo -n1 /amcl_pose >/dev/null 2>&1 && break
