@@ -80,21 +80,28 @@ def main():
 
     meta = load_meta(a.ds)
     samples = []
-    for split in ('train', 'val'):
-        idir = os.path.join(a.ds, 'images', split)
+    # 两种布局都支持: 平铺 images/*.jpg (默认) 和 images/{train,val}/*.jpg (--split)
+    img_root = os.path.join(a.ds, 'images')
+    splits = [('', img_root)]
+    for sub in ('train', 'val'):
+        if os.path.isdir(os.path.join(img_root, sub)):
+            splits.append((sub, os.path.join(img_root, sub)))
+    for split, idir in splits:
         if not os.path.isdir(idir):
             continue
         for fn in sorted(os.listdir(idir)):
             if fn.rsplit('.', 1)[-1].lower() not in ('jpg', 'jpeg', 'png'):
                 continue
-            lp = os.path.join(a.ds, 'labels', split, os.path.splitext(fn)[0] + '.txt')
+            lp = os.path.join(a.ds, 'labels', split, os.path.splitext(fn)[0] + '.txt') \
+                if split else os.path.join(a.ds, 'labels', os.path.splitext(fn)[0] + '.txt')
             boxes = []
             if os.path.exists(lp):
                 for line in open(lp):
                     v = line.split()
                     if len(v) >= 5:
                         boxes.append((int(v[0]), *[float(x) for x in v[1:5]]))
-            samples.append(dict(split=split, img=os.path.join(idir, fn), fn=fn, boxes=boxes))
+            samples.append(dict(split=split or 'flat', img=os.path.join(idir, fn),
+                                fn=fn, boxes=boxes))
 
     if not samples:
         print('这个数据集里没有图片:', a.ds)

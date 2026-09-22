@@ -142,6 +142,14 @@ python3 tools/gen_vision_dataset.py --n 200 --out datasets/vision_raw
 
 在 X-AnyLabeling 里：导入 `images/` → 按上表建 4 类 → 画框 → **导出 YOLO 格式**。
 
+实采样例（issue #8 修复后，`--mode-mix points:1.0`，9/9 帧都含对应场景的目标）：
+
+![数据集实采预览](dataset_preview.png)
+
+> 图里能看到：A_west/A_south/A_north/B_north 各自拍到自己的立牌（还顺带带到别组的背面，
+> 对训练是好事），car_1/car_3 的车牌清晰可读，`meta.jsonl` 同时记下了
+> **灯态**（green/yellow）与**车牌真值**（苏A·B8Q62 / 苏A·PL12A）。
+
 ### 可选：连自动框一起出
 
 ```bash
