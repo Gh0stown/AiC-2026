@@ -50,20 +50,17 @@ C_TASK = {'traffic_light': (255, 225, 0), 'standee': (0, 230, 255),
 TASK_CN = {'traffic_light': '红绿灯', 'standee': '人偶', 'plate': '车牌'}
 PREFIX = {'traffic_light': 'T', 'standee': 'S', 'plate': 'P'}
 SHORT = {'traffic_light': '灯', 'standee': '人', 'plate': '牌'}
+SHORT_EN = {'traffic_light': 'TL', 'standee': 'P', 'plate': 'PL'}
+
+
+from cnfont import load as _load_font, pick as _pick       # noqa: E402
 
 
 def font(size, cjk=False):
-    paths = (['/usr/share/fonts/opentype/noto/NotoSansCJK-Medium.ttc']
-             if cjk else []) + [
-        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf']
-    for p in paths:
-        if os.path.exists(p):
-            try:
-                return ImageFont.truetype(p, size)
-            except Exception:
-                pass
-    return ImageFont.load_default()
+    """★ 没有中文字体时自动回退到英文字体 (见 tools/cnfont.py)。
+    返回值兼容老用法: 直接当字体对象用; 中文标签请配合 CJK_OK 判断。"""
+    f, _ok = _load_font(size)
+    return f
 
 
 def text_w(d, txt, f):
@@ -169,6 +166,9 @@ def main():
     img.paste(base, (0, 0))
     d = ImageDraw.Draw(img, 'RGBA')
     f_mid, f_sm = font(21, True), font(17, True)
+    _, CJK = _load_font(17)
+    if not CJK:
+        print('  · 这台机器没有中文字体, 图上的说明改用英文 (装 fonts-noto-cjk 可恢复中文)')
 
     def P(x, y):
         return (x2px(x), y2py(y))
@@ -244,7 +244,9 @@ def main():
             L2 = 40
             d.line([(px, py), (px + L2 * math.cos(-it['yaw']), py + L2 * math.sin(-it['yaw']))],
                    fill=col + (255,), width=3)
-            put_label(px, py, '%d %s' % (it['order'], SHORT[it['task']]), col, big=True)
+            put_label(px, py, '%d %s' % (it['order'], _pick(SHORT[it['task']],
+                                                            SHORT_EN[it['task']], CJK)),
+                      col, big=True)
         else:
             col = C_WP
             d.ellipse([px - 10, py - 10, px + 10, py + 10], outline=col + (255,), width=4)
@@ -252,13 +254,19 @@ def main():
 
     # 图例 (地图下方, 不挡地图)
     d.rectangle([0, MAP, MAP, MAP + LEG], fill=(18, 18, 18))
+    def L(zh, en):
+        return _pick(zh, en, CJK)
     lines = [
-        [('红线 = 实测巡检轨迹', C_TRACE), ('   橙线 = 巡检环线 (箭头=行进方向)', C_LOOP),
-         ('   蓝点 = 起点', C_START), ('   绿圈 = 原航点', C_WP)],
-        [('黄 = 红绿灯', C_TASK['traffic_light']), ('   青 = 人偶立牌', C_TASK['standee']),
-         ('   橙 = 车牌', C_TASK['plate']),
-         ('   数字 = 最终路线顺序; 粗短线 = 到点后原地转向的拍照朝向', (220, 220, 220))],
-        [('跑法: python3 tools/patrol.py --file src/competition_robot/config/recognition_route.yaml',
+        [(L('红线 = 实测巡检轨迹', 'red = actual driven path'), C_TRACE),
+         (L('   橙线 = 巡检环线 (箭头=行进方向)', '   orange = planned loop (arrows = direction)'), C_LOOP),
+         (L('   蓝点 = 起点', '   blue = start'), C_START),
+         (L('   绿圈 = 原航点', '   green ring = original waypoint'), C_WP)],
+        [(L('黄 = 红绿灯', 'yellow = traffic light'), C_TASK['traffic_light']),
+         (L('   青 = 人偶立牌', '   cyan = standee'), C_TASK['standee']),
+         (L('   橙 = 车牌', '   orange = plate'), C_TASK['plate']),
+         (L('   数字 = 最终路线顺序; 粗短线 = 到点后原地转向的拍照朝向',
+            '   number = route order; short bar = shooting heading'), (220, 220, 220))],
+        [('run: python3 tools/patrol.py --file src/competition_robot/config/recognition_route.yaml',
           (170, 170, 170))],
     ]
     for r, row in enumerate(lines):

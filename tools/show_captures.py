@@ -21,12 +21,12 @@ from PIL import Image, ImageDraw, ImageFont
 WS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from cnfont import load as _load_font, pick as _pick       # noqa: E402
+
+
 def font(size):
-    for p in ('/usr/share/fonts/opentype/noto/NotoSansCJK-Medium.ttc',
-              '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'):
-        if os.path.exists(p):
-            return ImageFont.truetype(p, size)
-    return ImageFont.load_default()
+    return _load_font(size)[0]
 
 
 def latest_run(root):
@@ -77,7 +77,7 @@ def main():
     H = rowsn * (th + cap_h + pad) + pad
     sheet = Image.new('RGB', (W, H), (24, 24, 28))
     d = ImageDraw.Draw(sheet)
-    f = font(17)
+    f, CJK = _load_font(17)
     for i, (tgt, task, truth, fn) in enumerate(items):
         p = os.path.join(run, fn)
         if not os.path.exists(p):
@@ -89,7 +89,7 @@ def main():
         sheet.paste(im, (x, y))
         cap = '%s' % tgt
         if truth:
-            cap += '  真值:%s' % truth
+            cap += _pick('  真值:%s', '  truth:%s', CJK) % truth
         d.text((x + 2, y + th + 6), cap, fill=(230, 230, 120), font=f)
     out = a.out or os.path.join(run, 'overview.png')
     sheet.save(out)

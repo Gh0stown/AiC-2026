@@ -22,11 +22,8 @@ from map_pixels import SRC, x2px, y2py, px2x, px2y   # noqa: E402
 
 
 def font(sz=16):
-    for p in ('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-              '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf'):
-        if os.path.exists(p):
-            return ImageFont.truetype(p, sz)
-    return ImageFont.load_default()
+    from cnfont import load as _load_font
+    return _load_font(sz)[0]
 
 
 def load_trace(path):
@@ -83,8 +80,12 @@ def main():
             d.ellipse([px - r - 6, py - r - 6, px + r + 6, py + r + 6],
                       outline=(255, 0, 255, 255), width=3)
         d.text((px + r + 4, py - 12), '%d' % i, fill=(0, 160, 0) if not click else (255, 0, 255), font=f)
-    d.text((12, 12), '红线=实际轨迹 蓝点=起点  绿圈=航点(1..%d)  紫圈=打圈的点'
-           % len(wps), fill=(255, 255, 0), font=fs)
+    from cnfont import load as _lf, pick as _pick
+    _, CJK = _lf(16)
+    d.text((12, 12), _pick('红线=实际轨迹 蓝点=起点  绿圈=航点(1..%d)  紫圈=打圈的点',
+                           'red=actual path  blue=start  green ring=waypoint(1..%d)  '
+                           'magenta=ring', CJK) % len(wps),
+           fill=(255, 255, 0), font=fs)
     img.save(a.out)
     print('轨迹图 -> %s   (%d 个轨迹点, %d 个航点)' % (a.out, len(tr), len(wps)))
 

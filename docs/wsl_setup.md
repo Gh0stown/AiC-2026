@@ -33,6 +33,9 @@ sudo apt install -y ros-noetic-gmapping ros-noetic-slam-karto \
 # tools/*.py 依赖 (系统 python)
 sudo apt install -y python3-numpy python3-yaml python3-pil \
                     python3-opencv ros-noetic-cv-bridge
+# 画图脚本的中文字体 (不装的话图上中文会变成方块 □□□)
+#   没装也能跑: tools/cnfont.py 会自动改用英文标签, 图照样能读
+sudo apt install -y fonts-noto-cjk
 # 可选
 sudo apt install -y ros-noetic-teleop-twist-keyboard        # 键盘遥控
 sudo apt install -y ros-noetic-cartographer-ros             # 复赛加分项 (官方点名)
