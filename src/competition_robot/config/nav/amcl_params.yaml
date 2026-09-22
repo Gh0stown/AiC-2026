@@ -57,8 +57,12 @@ min_particles: 1500               # 实车 1500 (原仿真 500)
 max_particles: 5000               # 实车 5000 (原仿真 2000)
 kld_err: 0.05                     # 实车 0.05 (原仿真 0.02)
 kld_z: 0.99
-update_min_d: 0.05                # 实车 0.05 (原仿真 0.10) —— 修正更频繁
-update_min_a: 0.1
+# ★ 0.0 = 每来一帧激光就更新一次滤波器 (issue #3):
+#   原来 0.05/0.1 表示"车移动超过 5cm / 转超过 0.1rad 才更新" —— 于是**车静止时
+#   AMCL 不更新、也就不发 /amcl_pose**, 验收第 3 项(定位精度)因此采不到样本。
+#   本场地很小, 每帧都更新的算力代价可以忽略; 副作用是定位更跟手。
+update_min_d: 0.0
+update_min_a: 0.0
 resample_interval: 3              # 实车 3 (原仿真 1)
 transform_tolerance: 1.0          # 实车 1.0 (原仿真 0.3)
 recovery_alpha_slow: 0.0          # 实车关掉了自适应恢复 (丢了不会自己找回来)

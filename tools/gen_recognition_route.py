@@ -134,6 +134,13 @@ def main():
         it['order'] = i
 
     # ---- 2) 写路线 yaml (patrol.py 的 schema) ----
+    # 倒车入库 (issue #6): 原配置只在旧的 waypoints.yaml 里, 新路线要把它带过来,
+    #   patrol.py 跑完航点后会: 先用 move_base 开到 from 点 -> 原地转到背离库位 ->
+    #   激光对墙的位姿伺服倒进去 (不写死距离/时间)。
+    #   注意要用**发出去的名字** (带序号前缀, 如 17_ring) —— patrol.py 是按名字找点的
+    ring_it = next((it for it in items
+                    if it['kind'] == 'waypoint' and it['name'] == 'ring'), None)
+    ring_name = ('%02d_%s' % (ring_it['order'], ring_it['name'])) if ring_it else None
     out = dict(
         note='最终巡检路线 = 原巡检环线 + 沿途识别点; 由 tools/gen_recognition_route.py 生成',
         usage='python3 tools/patrol.py --file src/competition_robot/config/recognition_route.yaml',
@@ -152,10 +159,18 @@ def main():
         else:
             w['task'] = 'waypoint'
         out['waypoints'].append(w)
+    if ring_name:
+        # 库位 = 出生点那个角落 (三个停车位被车占着, 沿用旧 waypoints.yaml 的做法)
+        out['reverse_park'] = {
+            'from': ring_name,                     # ★ 'from' 是关键字, 只能这样写
+            'to': [round(start[0], 4), round(start[1], 4), 3.1416],
+            'note': '航点跑完后倒车入库: from=起倒点(航点名), to=[x,y,yaw]=库位中心位姿',
+        }
     with open(a.out_yaml, 'w') as f:
         f.write('# 最终巡检路线 (唯一真值源) —— 由 tools/gen_recognition_route.py 生成\n'
                 '# 顺序 = 沿巡检环线的弧长; recog 点带 yaw = 到点后原地转向拍照的朝向\n'
-                '# 跑法: python3 tools/patrol.py --file src/competition_robot/config/recognition_route.yaml\n')
+                '# 跑法: python3 tools/patrol.py --file src/competition_robot/config/recognition_route.yaml\n'
+                '#      (航点跑完会自动接倒车入库; 不想倒车加 --no-park)\n')
         yaml.safe_dump(out, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
 
     # ---- 3) 画图 (地图在上, 图例在下, 标签自动避让) ----

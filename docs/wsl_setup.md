@@ -38,7 +38,18 @@ sudo apt install -y python3-numpy python3-yaml python3-pil \
 sudo apt install -y fonts-noto-cjk
 # 可选
 sudo apt install -y ros-noetic-teleop-twist-keyboard        # 键盘遥控
-sudo apt install -y ros-noetic-cartographer-ros             # 复赛加分项 (官方点名)
+# 注意: Cartographer **没有 Noetic 的二进制包** (issue #1) —— apt 装不到,
+# 只有 ROS2 (foxy/humble) 才有 ros-*-cartographer-ros。Noetic 上要源码编译:
+#   sudo apt install -y python3-wstool python3-rosdep ninja-build stow
+#   mkdir -p ~/carto_ws/src && cd ~/carto_ws && wstool init src
+#   wstool merge -t src https://raw.githubusercontent.com/cartographer-project/cartographer_ros/master/cartographer_ros.rosinstall
+#   wstool update -t src
+#   src/cartographer/scripts/install_abseil.sh          # Noetic 必须 (abseil)
+#   sudo rosdep init 2>/dev/null; rosdep update
+#   rosdep install --from-paths src --ignore-src --rosdistro=noetic -y
+#   catkin_make_isolated --install --use-ninja && source install_isolated/setup.bash
+# 复赛只"点名"了 Gmapping/Cartographer, 我们已有 gmapping + karto, 这个属于加分项,
+# 时间紧可以先不做。
 sudo apt install -y ros-noetic-global-planner ros-noetic-hector-slam ros-noetic-rtabmap-ros
 ```
 
@@ -146,6 +157,13 @@ python3 tools/gen_recognition_points.py && python3 tools/gen_recognition_route.p
 
 * **界面**：Windows 11 + WSLg 可以直接开 Gazebo/RViz 窗口；老版本 WSL 需要额外 X server，
   或者干脆用 `gui:=false rviz:=false` 无头跑（脚本和验收都支持）。
+* **★ WSL 下 RViz 看不到车模**（issue #4，已修）：WSLg 的 Mesa d3d12 驱动渲染不了 OGRE 网格
+  （场地/代价地图/激光点都正常，只有 RobotModel 不显示；能显示激光点就说明 TF 是通的）。
+  用这个 launch，它**只给 RViz 设软件渲染、Gazebo 仍走 GPU**：
+  ```bash
+  roslaunch competition_robot navigation_wsl.launch
+  ```
+  参数与 `navigation.launch` 完全一致，只多一层 `LIBGL_ALWAYS_SOFTWARE=1`。
 * **`HOME` 可写**：本仓库的沙箱里 `$HOME` 只读，`acceptance.sh` 会把 `HOME` 重定向到
   `.cache/home`；主力机上不需要，脚本会自动判断。
 * **OpenGL**：WSLg 一般能用 D3D12 驱动；报 GL 错时试 `export LIBGL_ALWAYS_SOFTWARE=1`

@@ -17,11 +17,12 @@
 #      tools/run_recognition_route.sh --route <yaml>
 #      tools/run_recognition_route.sh --capture           # 每个识别点拍照, 存 captures/<时间戳>/
 #      tools/run_recognition_route.sh --capture --frames 5
+#      tools/run_recognition_route.sh --no-park            # 不做倒车入库
 # =============================================================================
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GUI=false; KEEP=false; PLOT=true; CAPTURE=false; FRAMES=3
+GUI=false; KEEP=false; PLOT=true; CAPTURE=false; FRAMES=3; PARK=true
 ROUTE="$ROOT/src/competition_robot/config/recognition_route.yaml"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -29,6 +30,7 @@ while [ $# -gt 0 ]; do
     --keep)    KEEP=true ;;
     --no-plot) PLOT=false ;;
     --capture) CAPTURE=true ;;
+    --no-park) PARK=false ;;
     --frames)  FRAMES="$2"; shift ;;
     --route)   ROUTE="$2"; shift ;;
     *) echo "未知参数: $1"; exit 2 ;;
@@ -156,8 +158,12 @@ fi
 
 hdr "跑最终路线 ($(basename "$ROUTE"))"
 echo "  每个识别点: 原地转向 -> 直线过去 -> 到点转到拍照朝向"
-python3 "$ROOT/tools/patrol.py" --file "$ROUTE" --no-park \
-        --save-trace "$TRACE" 2>&1 | tee "$LOGD/patrol.log" | grep -E "✓|✗|一圈|摆正|到点" || true
+# ★ issue #6: 不再硬编码 --no-park —— 路线 yaml 里带 reverse_park 时, 航点跑完
+#   会自动接倒车入库 (patrol.py 的原生流程)。想跳过加 --no-park。
+PARK_ARG=""
+$PARK || PARK_ARG="--no-park"
+python3 "$ROOT/tools/patrol.py" --file "$ROUTE" $PARK_ARG \
+        --save-trace "$TRACE" 2>&1 | tee "$LOGD/patrol.log" | grep -E "✓|✗|一圈|摆正|到点|入位" || true
 
 hdr "结果"
 OK=$(grep -c "✓" "$LOGD/patrol.log" 2>/dev/null | head -1); OK=${OK:-0}

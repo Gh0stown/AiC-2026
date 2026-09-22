@@ -25,10 +25,11 @@ import argparse
 import math
 import os
 import sys
+import time
 from collections import deque
 
 import rospy
-from geometry_msgs.msg import PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import Odometry
 
 
@@ -135,15 +136,35 @@ def main():
 
     rospy.init_node('check_localization', anonymous=True)
     m = Measurer(a.csv)
-    print('开始测量 (只订阅, 不发指令) ...')
+    print('开始测量 ...')
+    # ★ issue #3 兜底: AMCL 只在"车动了"或"每帧更新"时才发 /amcl_pose。
+    #   万一配置又被改回 update_min_d>0, 静止时就会一条样本都收不到 ——
+    #   这里等 6 秒还没样本就自己原地轻转一下, 触发几次滤波器更新。
+    nudge = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
+    need_nudge = True
     try:
         if a.duration > 0:
-            rospy.sleep(a.duration)
+            t0 = time.time()
+            nudged = False
+            while time.time() - t0 < a.duration:
+                rospy.sleep(0.2)
+                if (not nudged) and (time.time() - t0 > 6.0) and len(m.samples) == 0:
+                    print('  6 秒没收到 /amcl_pose —— 原地轻转一下触发 AMCL 更新')
+                    print('  (AMCL 的 update_min_d/a 决定"车不动就不更新"; 见 amcl_params.yaml)')
+                    tw = Twist()
+                    tw.angular.z = 0.25
+                    for _ in range(10):                 # 约 1 秒
+                        nudge.publish(tw)
+                        rospy.sleep(0.1)
+                    nudge.publish(Twist())
+                    nudged = True
         else:
             while not rospy.is_shutdown():
                 rospy.sleep(0.5)
     except KeyboardInterrupt:
         pass
+    finally:
+        nudge.publish(Twist())
     print('=== 定位误差 (AMCL vs 真值) ===')
     m.report()
     if m.csv:

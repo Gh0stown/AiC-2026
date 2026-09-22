@@ -374,7 +374,7 @@ python3 tools/check_scan_selfhit.py    # 检查 /scan 有没有打到自己车�
 | **gmapping** ✅已装 | `ros-noetic-gmapping` | 粒子滤波, 要里程计, 无回环; 小场地够用 |
 | **slam_karto** ✅已装 | `ros-noetic-slam-karto` | 图优化 + 回环, 场地大/绕圈多时更稳 |
 | hector_slam | `ros-noetic-hector-slam` | **不需要里程计**, 纯扫描匹配; 对雷达频率/转速敏感 |
-| cartographer | `ros-noetic-cartographer-ros` | 2D/3D 子图 + 回环, 最稳但最重, 要里程计+IMU |
+| cartographer | **Noetic 无二进制包**, 需源码编译 | 2D/3D 子图 + 回环, 最稳但最重, 要里程计+IMU |
 | rtabmap | `ros-noetic-rtabmap-ros` | 图优化, 可用 RGB-D 做视觉回环, 也能出 3D 图 |
 | LIO-SAM / FAST-LIO 等 | 源码编译 | 激光-惯性 3D SLAM, 用 3D 雷达+IMU; 本场地属于杀鸡用牛刀 |
 | octomap_server | `ros-noetic-octomap-server` | 不是 SLAM, 是把点云转成 3D 占据栅格 |

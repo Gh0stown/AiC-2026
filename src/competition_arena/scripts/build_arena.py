@@ -259,6 +259,25 @@ WORLD_TMPL = '''<?xml version="1.0" ?>
 <sdf version="1.6">
   <world name="competition_arena">
 
+    <!-- ================= 物理步进 =================
+         ★ 2026-09-22 (issue #5): Gazebo 不给 <physics> 时默认 1000 Hz 步进
+           (max_step_size 1ms), 场地变大 + 红绿灯带关节之后这一档**跑不动**,
+           实测导航帧率从 60 掉到 10 以下。
+           这里降到 500 Hz / 2ms。真机端没有这一层, 只影响仿真实时率。
+           想更省可以继续降到 250 Hz (max_step_size 0.004), 但接触会变糊。 -->
+    <physics name="arena_physics" default="0" type="ode">
+      <max_step_size>0.002</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>500</real_time_update_rate>
+      <ode>
+        <solver>
+          <type>quick</type>
+          <iters>50</iters>
+          <sor>1.3</sor>
+        </solver>
+      </ode>
+    </physics>
+
     <include><uri>model://sun</uri></include>
 
     <!-- ================= 场地地面 (使用比赛地图贴图) ================= -->

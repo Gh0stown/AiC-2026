@@ -1,6 +1,7 @@
 # 最终巡检路线 (唯一真值源) —— 由 tools/gen_recognition_route.py 生成
 # 顺序 = 沿巡检环线的弧长; recog 点带 yaw = 到点后原地转向拍照的朝向
 # 跑法: python3 tools/patrol.py --file src/competition_robot/config/recognition_route.yaml
+#      (航点跑完会自动接倒车入库; 不想倒车加 --no-park)
 note: 最终巡检路线 = 原巡检环线 + 沿途识别点; 由 tools/gen_recognition_route.py 生成
 usage: python3 tools/patrol.py --file src/competition_robot/config/recognition_route.yaml
 start:
@@ -145,3 +146,10 @@ waypoints:
   - 1.128
   - 1.698
   task: waypoint
+reverse_park:
+  from: 17_ring
+  to:
+  - 1.772
+  - 1.782
+  - 3.1416
+  note: '航点跑完后倒车入库: from=起倒点(航点名), to=[x,y,yaw]=库位中心位姿'
