@@ -1,0 +1,66 @@
+<?xml version="1.0"?>
+<!--
+  ============================================================================
+   WSL 专用: 定位 + 导航 + RViz（RViz 强制软件渲染）
+  ============================================================================
+
+  为什么需要这个文件:
+    WSLg 的 Mesa d3d12 驱动渲染不了 OGRE 网格 —— RViz 里看不到车模,
+    但场地/代价地图/激光点/规划路径全部正常（Global Status 也是 Ok）。
+    在原生机（无显卡, 走 llvmpipe）上则一切正常, 所以这是 WSL 环境特有的问题。
+
+  解决办法:
+    只给 RViz 这一个进程设 LIBGL_ALWAYS_SOFTWARE=1。
+    Gazebo 保持走 GPU (D3D12) 加速, 物理仿真性能完全不受影响。
+    RViz 只是可视化工具, 软件渲染足够用。
+
+  实测对比:
+    全 D3D12 (默认)                          -> 车模不显示
+    全 llvmpipe (软件)                        -> 车模显示, 但 Gazebo 也变慢
+    Gazebo=D3D12 + RViz=llvmpipe (本文件)     -> 车模显示, Gazebo 保持 GPU  [OK]
+
+  用法:
+    roslaunch competition_robot navigation_wsl.launch
+    roslaunch competition_robot navigation_wsl.launch planner:=teb
+    roslaunch competition_robot navigation_wsl.launch sim:=false    # 仿真已在跑
+    roslaunch competition_robot navigation_wsl.launch rviz:=false   # 不要 RViz
+
+  参数与 navigation.launch 完全一致, 只是多了一层 RViz 软件渲染。
+
+  注: 若你在非 WSL 环境（原生 Linux / 有正常 GL 驱动）跑这个文件,
+      里面那个 env 是无害的, 只是 RViz 会走软件渲染、略微费 CPU。
+      那种情况下直接用原版 navigation.launch 即可。
+  ============================================================================
+-->
+<launch>
+  <!-- 参数: 与原 navigation.launch 对齐 -->
+  <arg name="map"     default="$(find competition_robot)/maps/arena_clean.yaml"/>
+  <arg name="sim"     default="true"/>
+  <arg name="gui"     default="true"/>
+  <arg name="rviz"    default="true"/>
+  <arg name="x"       default="1.772"/>
+  <arg name="y"       default="1.782"/>
+  <arg name="yaw"     default="3.1416"/>
+  <arg name="planner" default="dwa"/>
+  <arg name="gplan"   default="navfn"/>
+  <arg name="rviz_config" default="$(find competition_robot)/rviz/nav.rviz"/>
+
+  <!-- 原导航 launch: 关掉它自带的 RViz, 其余参数原样透传 -->
+  <include file="$(find competition_robot)/launch/navigation.launch">
+    <arg name="map"     value="$(arg map)"/>
+    <arg name="sim"     value="$(arg sim)"/>
+    <arg name="gui"     value="$(arg gui)"/>
+    <arg name="rviz"    value="false"/>
+    <arg name="x"       value="$(arg x)"/>
+    <arg name="y"       value="$(arg y)"/>
+    <arg name="yaw"     value="$(arg yaw)"/>
+    <arg name="planner" value="$(arg planner)"/>
+    <arg name="gplan"   value="$(arg gplan)"/>
+  </include>
+
+  <!-- 唯一区别: 只给 RViz 这个进程设软件渲染, Gazebo 不受影响 -->
+  <node if="$(arg rviz)" pkg="rviz" type="rviz" name="rviz"
+        args="-d $(arg rviz_config)" required="false" output="screen">
+    <env name="LIBGL_ALWAYS_SOFTWARE" value="1"/>
+  </node>
+</launch>
