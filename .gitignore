@@ -24,6 +24,10 @@ __pycache__/
 !/weights/**
 !**/weights/**
 
+# 例外: ultralytics 第一次训练会做 AMP 自检, 自动下载这个文件到 weights/。
+# 它不是本项目的推理权重, 别跟着 commit 进来 (必须写在上面两条放行规则之后才生效)。
+/weights/yolo26n.pt
+
 # ---- 临时验证目录 (我调试用的, 不入库) ----
 .verify/
 *.orig
