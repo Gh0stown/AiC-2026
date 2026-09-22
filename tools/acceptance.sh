@@ -27,9 +27,15 @@ for a in "$@"; do
     --gui)   GUI=true ;;
     --keep)  KEEP=true ;;
     --quick) QUICK=true ;;
+    --route) ROUTE="$2"; shift ;;
     *) echo "未知参数: $a"; exit 2 ;;
   esac
 done
+
+# ★ issue #6: 巡航/倒车入库验收以前跑的是**旧路线**(waypoints.yaml, 没带 --file),
+#   于是"新路线 + 倒车入库"这个组合从没被验过。现在默认验**最终路线**,
+#   想验旧路线加 --route <yaml>。
+ROUTE="${ROUTE:-$ROOT/src/competition_robot/config/recognition_route.yaml}"
 
 # 用固定端口, 避免和别的 roslaunch 抢
 export ROS_MASTER_URI="${ROS_MASTER_URI:-http://localhost:11500}"
@@ -233,16 +239,34 @@ if $QUICK; then
   hdr "6/6 倒车入库"
   note "倒车入库: 已跳过"
 else
-  hdr "5/6+6/6 标准 7 航点巡航 + 倒车入库"
+  TOT=$(python3 -c "
+import yaml,sys
+d=yaml.safe_load(open('$ROUTE'))
+print(sum(1 for w in d.get('waypoints',[]) if w.get('task')!='waypoint'), len(d.get('waypoints',[])))
+" 2>/dev/null | awk '{print $2}')
+  TOT=${TOT:-0}
+  NPARK=$(python3 -c "
+import yaml
+d=yaml.safe_load(open('$ROUTE'))
+print('有' if d.get('reverse_park') else '无')
+" 2>/dev/null)
+  hdr "5/6+6/6 最终路线巡航 ($(basename "$ROUTE"), $TOT 站) + 倒车入库($NPARK)"
   rm -f "$LOGD/trace.csv"
-  timeout 700 python3 tools/patrol.py --save-trace "$LOGD/trace.csv" \
+  timeout 900 python3 tools/patrol.py --file "$ROUTE" --save-trace "$LOGD/trace.csv" \
       > "$LOGD/check5.txt" 2>&1
-  grep -E "一圈跑完|倒车|入库|尾" "$LOGD/check5.txt" | tail -6 | sed 's/^/      /'
-  if grep -qE "7/7" "$LOGD/check5.txt"; then
-    ok "巡航: 7/7 航点全部到达"
+  grep -E "一圈跑完|倒车|入库|尾|位姿伺服结束" "$LOGD/check5.txt" | tail -6 | sed 's/^/      /'
+  if grep -qE "$TOT/$TOT" "$LOGD/check5.txt"; then
+    ok "巡航: $TOT/$TOT 站全部到达"
   else
-    N=$(grep -oE "[0-9]/7 个航点" "$LOGD/check5.txt" | tail -1)
+    N=$(grep -oE "[0-9]+/$TOT 个航点" "$LOGD/check5.txt" | tail -1)
     bad "巡航: ${N:-没跑完} (见 $LOGD/check5.txt)"
+  fi
+  if [ "$NPARK" = "有" ]; then
+    if grep -qE "入位" "$LOGD/check5.txt"; then
+      ok "倒车入库: 已入位"
+    else
+      bad "倒车入库: 没看到入位结果 (见 $LOGD/check5.txt)"
+    fi
   fi
   # 车道合规: 轨迹有没有进 A/B 街区
   if [ -f "$LOGD/trace.csv" ]; then

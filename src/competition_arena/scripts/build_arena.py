@@ -266,9 +266,10 @@ WORLD_TMPL = '''<?xml version="1.0" ?>
            这里降到 500 Hz / 2ms。真机端没有这一层, 只影响仿真实时率。
            想更省可以继续降到 250 Hz (max_step_size 0.004), 但接触会变糊。 -->
     <physics name="arena_physics" default="0" type="ode">
-      <max_step_size>0.002</max_step_size>
+      <!-- 物理步长/频率由 build_arena.py 的 --max-step-size 控制 (默认 {step}) -->
+      <max_step_size>{step}</max_step_size>
       <real_time_factor>1.0</real_time_factor>
-      <real_time_update_rate>500</real_time_update_rate>
+      <real_time_update_rate>{rate}</real_time_update_rate>
       <ode>
         <solver>
           <type>quick</type>
@@ -377,7 +378,10 @@ def build_world(walls, stripes, frame, args):
         floor_t='%.4f' % args.floor_thickness,
         floor_z='%.5f' % (-args.floor_thickness / 2.0),
         wall_geom=wall_geom,
-        stripe_model=stripe_model)
+        stripe_model=stripe_model,
+        # 物理步长 -> 频率 (issue #5): 250Hz 写成 0.004 + real_time_update_rate 250
+        step='%.4f' % args.max_step_size,
+        rate='%d' % int(round(1.0 / args.max_step_size)))
 
 
 MATERIAL_TMPL = '''// Auto-generated: 比赛场地地面贴图
@@ -412,6 +416,11 @@ def main():
     ap.add_argument('--stripes', choices=['flat', 'raised'], default='flat',
                     help='地面条纹块: flat=仅贴图; raised=做成低矮凸起')
     ap.add_argument('--stripe-height', type=float, default=0.03, help='条纹凸起高度 (m)')
+    ap.add_argument('--max-step-size', type=float, default=0.002,
+                    help='物理步长 (s)。默认 0.002 = 500Hz —— Gazebo 不给 <physics> 时是 '
+                         '0.001(1000Hz), 场地变大后跑不动 (issue #5: RTF 0.80, 界面 <10 帧)。'
+                         ' 只看画面/录制可以给 0.004(250Hz) 甚至 0.008(125Hz), CPU 更低;'
+                         ' 但步长变大会影响接触/摩擦精度, 改完要重跑 tools/bench_*.sh')
     ap.add_argument('--map-resolution', type=float, default=0.01, help='ROS 栅格地图分辨率 (m/cell)')
     ap.add_argument('--walls', choices=['boundary', 'all'], default='boundary',
                     help='boundary=只做外沿围墙 (默认); all=把图中所有线条都做成墙')

@@ -24,18 +24,28 @@ sudo rosdep init 2>/dev/null; rosdep update
 echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
 ```
 
-本仓库用到的额外包：
+本仓库用到的额外包（**一个个装** —— apt 是全有或全无的，
+一个不存在的包会让整条命令里后面的都装不上，issue #1 就踩过这个）：
 
 ```bash
 # 必需: 巡航/规划/建图
-sudo apt install -y ros-noetic-gmapping ros-noetic-slam-karto \
-                    ros-noetic-dwa-local-planner ros-noetic-teb-local-planner
+for p in ros-noetic-gmapping ros-noetic-slam-karto \
+         ros-noetic-dwa-local-planner ros-noetic-teb-local-planner; do
+  sudo apt install -y "$p" || echo "!! $p 装不上, 先记下继续"
+done
+
 # tools/*.py 依赖 (系统 python)
-sudo apt install -y python3-numpy python3-yaml python3-pil \
-                    python3-opencv ros-noetic-cv-bridge
-# 画图脚本的中文字体 (不装的话图上中文会变成方块 □□□)
-#   没装也能跑: tools/cnfont.py 会自动改用英文标签, 图照样能读
-sudo apt install -y fonts-noto-cjk
+for p in python3-numpy python3-yaml python3-pil python3-opencv ros-noetic-cv-bridge; do
+  sudo apt install -y "$p" || echo "!! $p 装不上"
+done
+
+# 画图脚本的中文字体 (不装的话图上中文会变成方块 □□□;
+# 没装也能跑: tools/cnfont.py 会自动改用英文标签, 图照样能读)
+sudo apt install -y fonts-noto-cjk || true
+```
+
+> 本仓库实际用的是 **gmapping / slam_karto**（外加 hector 可选），**够用**。
+> Cartographer 只是复赛 PDF 里"点名"了，属加分项。
 # 可选
 sudo apt install -y ros-noetic-teleop-twist-keyboard        # 键盘遥控
 # 注意: Cartographer **没有 Noetic 的二进制包** (issue #1) —— apt 装不到,
@@ -157,6 +167,9 @@ python3 tools/gen_recognition_points.py && python3 tools/gen_recognition_route.p
 
 * **界面**：Windows 11 + WSLg 可以直接开 Gazebo/RViz 窗口；老版本 WSL 需要额外 X server，
   或者干脆用 `gui:=false rviz:=false` 无头跑（脚本和验收都支持）。
+* **`[WARN:COPY MODE]`**（issue #4 末尾）：WSLg 窗口标题偶尔出现这个 = 没能走 dmabuf
+  零拷贝、退化成 CPU 逐帧拷贝，会加剧卡顿甚至窗口刷不出来。缓解：先 `wsl --shutdown`
+  释放内存（WSL 会攥着上次仿真的内存不放）、**只开一个界面**（Gazebo + RViz 同开最容易触发）。
 * **★ WSL 下 RViz 看不到车模**（issue #4，已修）：WSLg 的 Mesa d3d12 驱动渲染不了 OGRE 网格
   （场地/代价地图/激光点都正常，只有 RobotModel 不显示；能显示激光点就说明 TF 是通的）。
   用这个 launch，它**只给 RViz 设软件渲染、Gazebo 仍走 GPU**：

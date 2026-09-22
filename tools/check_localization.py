@@ -105,7 +105,14 @@ class Measurer(object):
         d = [s[1] for s in self.samples]
         yaw = [abs(s[2]) for s in self.samples]
         if not d:
-            print('  没采到样本 —— 确认仿真在跑, 并且 /amcl_pose 与 /odom_groundtruth 都有数据')
+            print('  没采到样本 —— 分话题看:')
+            print('    /amcl_pose        : %s' % ('有数据 (收到 %d 条)' % self.n_amcl
+                                                  if getattr(self, 'n_amcl', 0) else '**一条都没收到**'))
+            print('    /odom_groundtruth : %s' % ('有数据' if getattr(self, 'gt', None)
+                                                  else '**一条都没收到** (仿真没起?)'))
+            print('  常见原因: AMCL 的 update_min_d/update_min_a > 0 时, 车**静止不动就不更新**')
+            print('  滤波器, 于是不发 /amcl_pose —— amcl_params.yaml 里设成 0.0 即可')
+            print('  (本脚本也会在 6 秒后自动原地轻转一下触发更新)')
             return None
         # 去掉开头 3 秒 (AMCL 刚起步粒子云还没收窄)
         t0 = self.samples[0][0]

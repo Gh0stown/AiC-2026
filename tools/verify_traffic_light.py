@@ -118,13 +118,30 @@ def main():
                      ('✓ 亮的正是 %s' % lit) if ok else ('✗ 实际亮的是 %s' % lit)))
         print()
 
+    # ★ issue #2 的 B 方案: 上面验的是"手动命令 -> 灯珠位姿"这条链;
+    #   再顺带确认**循环节点自己在切** (否则把节点关了也看不出来)。
+    cycle_bad = 0
     if use_node:
-        cmd.publish(String(data='auto'))          # 交还给自动循环
-        rospy.sleep(0.5)
+        seen = []
+        sub = rospy.Subscriber('/traffic_light/state', String,
+                               lambda m: seen.append(m.data.strip().lower()), queue_size=10)
+        cmd.publish(String(data='auto'))
+        t1 = time.time()
+        while time.time() - t1 < 22.0 and len(set(seen)) < 3:
+            rospy.sleep(0.3)
+        sub.unregister()
+        got = [c for c in ('green', 'yellow', 'red') if c in set(seen)]
+        print('自动循环检查: 22 秒内观察到 %s' % (', '.join(got) if got else '(什么都没收到)'))
+        if len(got) >= 2:
+            print('  ✓ 循环节点在工作 (时序 绿6s->黄2s->红6s, 22s 至少能看到 2 种)')
+        else:
+            print('  ✗ 只看到 %d 种状态 —— 检查 traffic_light 节点是否在跑' % len(got))
+            cycle_bad = 1
+        print()
 
     n = len(lights) * 3
     print('结论: %s' % ('✓ %d/%d 全部正确' % (n, n) if bad == 0 else '✗ %d/%d 不对' % (bad, n)))
-    return 0 if bad == 0 else 1
+    return 0 if (bad == 0 and cycle_bad == 0) else 1
 
 
 if __name__ == '__main__':
