@@ -300,7 +300,12 @@ def capture(args, plans, objs, out_dir):
                 rospy.sleep(0.1)
         ms = ModelState()
         ms.model_name = model
-        ms.pose.position.x, ms.pose.position.y, ms.pose.position.z = p['x'], p['y'], 0.02
+        # ★ rig 的相机 sensor 没有 <pose>, 相机就在模型原点上 —— 所以模型原点必须抬到
+        #   相机高度 (mount[2]), 否则相机比投影假设的低 0.18 m, 目标整体被顶出画面。
+        #   完整机器人 (competition_robot) 则相反: 它有重力, 落到 0 之后相机正好在
+        #   mount[2], 所以给个小 z 让它落下去就行。
+        z = rob['mount'][2] if args.rig else 0.02
+        ms.pose.position.x, ms.pose.position.y, ms.pose.position.z = p['x'], p['y'], z
         ms.pose.orientation.z = math.sin(p['yaw'] / 2.0)
         ms.pose.orientation.w = math.cos(p['yaw'] / 2.0)
         ms.reference_frame = 'world'
