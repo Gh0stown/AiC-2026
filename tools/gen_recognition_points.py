@@ -56,6 +56,17 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import setup_cars as SC          # noqa: E402  车辆/车牌几何唯一真值源
 import gen_standees as GS        # noqa: E402  人偶立牌几何唯一真值源
 
+# ⚠️ 相机高度标定: **不要**用"抬高相机"去补 #10 的投影偏差 —— 已被多距离实测否定。
+#   2026-09-23 用亮灯珠在 0.8/1.4/2.2 m 三个距离实测 (tools/check_projection.py):
+#     Δv = -27.5 / -7.6 / -3.9 px
+#   按相机高度反解得到 19/9/7 mm —— **不是常数**, 所以不是相机高度问题。
+#   按"目标实际高度"反解, 远距离两点一致给出 0.418 m (模型写 0.410) —— 是**物体自己矮了**。
+#   已查到的部分原因: 红绿灯是**动态模型** (<static>false</static>, base 8kg) 会受重力沉降;
+#   立牌和车都是 <static>true</static>, 不会沉。
+#   ⚠️ 车牌的 ~26px (@0.66m) 偏差**仍未定位**, 见 docs/issue_log.md 的 #10 续。
+#   真正的修法方向: 标注/投影不要用"写入的位姿", 而要用 Gazebo 里**实测的 link 位姿**。
+CAM_Z_CALIB = 0.0        # 保持 0; 需要临时试验时才改, 并务必用 check_projection.py 复核
+
 FIELD_LINE = 2.075       # 白线内沿 (车不过这条线)
 ROT_R = 0.2582           # 原地转向时车心到墙的最小距离, 取自 tools/patrol.py 的
                          # FOOTPRINT_R —— 点位必须满足它, 否则执行时"转不开"
@@ -111,7 +122,7 @@ def load_robot():
                 half_w_tan=math.tan(hfov / 2.0), half_h_tan=math.tan(vfov_half),
                 hfov_deg=math.degrees(hfov), vfov_deg=2 * math.degrees(vfov_half),
                 mount=(float(cam['mount'][0]), float(cam['mount'][1]),
-                       float(cam['mount'][2])),
+                       float(cam['mount'][2]) + CAM_Z_CALIB),
                 half_x=float(ch['length']) / 2.0 + abs(cox) + FOOT_MARGIN,
                 half_y=float(ch['width']) / 2.0 + abs(coy) + FOOT_MARGIN,
                 length=float(ch['length']), width=float(ch['width']))

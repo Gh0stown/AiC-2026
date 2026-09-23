@@ -150,6 +150,16 @@ python3 tools/gen_vision_dataset.py --n 200 --out datasets/vision_raw
 > 对训练是好事），car_1/car_3 的车牌清晰可读，`meta.jsonl` 同时记下了
 > **灯态**（green/yellow）与**车牌真值**（苏A·B8Q62 / 苏A·PL12A）。
 
+### ⚠️ 投影标注目前**不可信**（issue #10）
+
+`tools/gen_vision_dataset.py` 的自动框是**几何投影**算的，实测和画面**对不上**
+（车牌处偏高约 26 px @0.66 m），所以：
+
+* **不要**用 `--with-labels` 的框去训练（会训练出"系统性偏移"的模型，而 mAP 看不出来）；
+* 手工标注不受影响 ✓（这也正是当前的选择）；
+* 检查/复核用 `tools/check_projection.py`（多距离实测，能区分"相机高度"和"主点"两种根因）；
+* 详见 `docs/issue_log.md` 的 #10 与 #10 续。
+
 ### 绕圈采集（一次覆盖多角度）
 
 ```bash
