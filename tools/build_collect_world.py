@@ -53,7 +53,9 @@ LIGHT_X, LIGHT_YS = -3.00, [2.05, 0.85]
 LIGHT_NAMES = ['tl_top', 'tl_bot']
 # ---- 工位 C: 车牌 (车头/车牌朝 +x, 车从 +x 侧对着拍) ----
 CAR_X, CAR_YS = 3.00, [-1.10, 0.10, 1.30]
-CAR_YAW = math.pi          # 与比赛 world 里 spawn 的朝向一致 (车牌朝 +x)
+# ★ 车牌朝哪边: 车牌在车体局部 **+x** 面, 采集车又放在 +x 侧, 所以这里必须 yaw=0
+#   (最初抄了比赛 world 的 3.1416, 结果车牌朝 -x, 拍到的全是车尾 —— 例图里没车牌 ✗)
+CAR_YAW = 0.0
 FLOOR_TILE = 4.4           # arena_floor 单块尺寸
 FLOOR_N = 3                # 3x3 铺满 -> 13.2 x 13.2
 

@@ -83,6 +83,31 @@ def boxes_from_layout(layout):
     return out
 
 
+def full_in_frame(pts, x, y, yaw, rob, margin=8.0):
+    """整个目标(8 个角点)是否都在画面内 (留 margin 像素边距)。
+
+    ★ 灯箱/车牌要"拍全": 红绿灯在 0.8m 时灯箱顶部只剩 76px 就贴边了 ✗,
+      所以这两个工位要求**完整可见**, 不满足就换距离/重抽。
+    """
+    u, v, dep = G_proj(pts, x, y, yaw, rob)
+    if (dep < 0.05).any():
+        return False
+    return bool(((u >= margin) & (u < rob['W'] - margin) &
+                 (v >= margin) & (v < rob['H'] - margin)).all())
+
+
+def dists_of(spec):
+    """'1.0,1.4,1.8' 或 '1.0:2.0:0.25' (起:止:步长) -> 距离列表"""
+    if ':' in spec:
+        a, b, c = [float(v) for v in spec.split(':')]
+        out, x = [], a
+        while x <= b + 1e-9:
+            out.append(round(x, 3))
+            x += c
+        return out
+    return [float(v) for v in spec.split(',') if v.strip()]
+
+
 def visible_names(objs, x, y, yaw, rob):
     """这一帧里大致能看到哪些物体 (投影粗判, 位置精度受 #10 影响, 但"在不在画面里"够用)"""
     names = []
@@ -115,7 +140,12 @@ def G_proj(pts, x, y, yaw, rob):
 # =============================================================================
 #  拍摄规划
 # =============================================================================
+skipped_full = [0]          # 因"目标拍不全"被跳过的位姿数
+
+
 def plan(layout, args, rng):
+    skipped_full[0] = 0
+    args.rob = G.load_robot()
     # ★ 必须用 boxes_from_layout() 的结果: 它才带 3D 角点 ('pts')。
     #   直接用 layout['objects'] 会在 visible_names() 里 KeyError。
     objs = boxes_from_layout(layout)
@@ -148,30 +178,46 @@ def plan(layout, args, rng):
             plans.append(dict(phase='ring', target=o['name'], x=got[0], y=got[1],
                               yaw=got[2], dist=got[3], light=None))
 
-    # ---- B 红绿灯 (每种状态都拍) ----
+    # ---- B 红绿灯 (距离扫描 x 三种状态, 且灯箱必须完整在画面里) ----
     for o in lights:
         for st in args.light_states.split(','):
-            for d in [float(v) for v in args.light_dists.split(',')]:
+            for d in dists_of(args.light_dists):
                 for _ in range(args.per):
+                    got = None
+                    for _try in range(30):
+                        lat = rng.uniform(-args.lat_jitter, args.lat_jitter)
+                        x = o['x'] + d + rng.uniform(-0.03, 0.03)
+                        y = o['y'] + lat
+                        yaw = wrap(math.atan2(o['y'] - y, o['x'] - x)
+                                   + math.radians(rng.uniform(-4, 4)))
+                        if full_in_frame(o['pts'], x, y, yaw, args.rob, args.frame_margin):
+                            got = (x, y, yaw)
+                            break
+                    if got is None:
+                        skipped_full[0] += 1
+                        continue
+                    plans.append(dict(phase='light', target=o['name'], x=got[0], y=got[1],
+                                      yaw=got[2], dist=d, light=st.strip()))
+
+    # ---- C 车牌 (距离扫描, 车牌必须完整在画面里) ----
+    for o in cars:
+        for d in dists_of(args.car_dists):
+            for _ in range(args.per):
+                got = None
+                for _try in range(30):
                     lat = rng.uniform(-args.lat_jitter, args.lat_jitter)
-                    x = o['x'] + d
+                    x = o['x'] + d + rng.uniform(-0.03, 0.03)
                     y = o['y'] + lat
                     yaw = wrap(math.atan2(o['y'] - y, o['x'] - x)
-                               + math.radians(rng.uniform(-4, 4)))
-                    plans.append(dict(phase='light', target=o['name'], x=x, y=y, yaw=yaw,
-                                      dist=d, light=st.strip()))
-
-    # ---- C 车牌 ----
-    for o in cars:
-        for d in [float(v) for v in args.car_dists.split(',')]:
-            for _ in range(args.per):
-                lat = rng.uniform(-args.lat_jitter, args.lat_jitter)
-                x = o['x'] + d
-                y = o['y'] + lat
-                yaw = wrap(math.atan2(o['y'] - y, o['x'] - x)
-                           + math.radians(rng.uniform(-5, 5)))
-                plans.append(dict(phase='plate', target=o['name'], x=x, y=y, yaw=yaw,
-                                  dist=d, light=None))
+                               + math.radians(rng.uniform(-5, 5)))
+                    if full_in_frame(o['pts'], x, y, yaw, args.rob, args.frame_margin):
+                        got = (x, y, yaw)
+                        break
+                if got is None:
+                    skipped_full[0] += 1
+                    continue
+                plans.append(dict(phase='plate', target=o['name'], x=got[0], y=got[1],
+                                  yaw=got[2], dist=d, light=None))
     return plans, objs
 
 
@@ -313,8 +359,12 @@ def main():
     ap.add_argument('--lat-jitter', type=float, default=0.06, help='侧向抖动 (m)')
     ap.add_argument('--per', type=int, default=1, help='每个 (距离/状态) 拍几张')
     ap.add_argument('--light-states', default='red,yellow,green')
-    ap.add_argument('--light-dists', default='0.8,1.2,1.6')
+    ap.add_argument('--light-dists', default='1.0:2.0:0.25',
+                    help='红绿灯距离扫描: "起:止:步长" 或逗号列表。'
+                         '★ 别小于 1.0m —— 灯箱顶部在 0.68m 就贴到画面边缘了')
     ap.add_argument('--car-dists', default='0.6,0.9,1.2')
+    ap.add_argument('--frame-margin', type=float, default=8.0,
+                    help='灯箱/车牌要求完整在画面内, 留这么多像素边距')
     ap.add_argument('--img-ext', default='jpg', choices=['jpg', 'png'])
     ap.add_argument('--jpeg-quality', type=int, default=92)
     ap.add_argument('--robot-model', default='competition_robot')
@@ -361,8 +411,10 @@ def main():
         rob = G.load_robot()
         hit = sum(1 for p in plans if p['target'] in
                   visible_names(objs, p['x'], p['y'], p['yaw'], rob))
-        print('  目标在画面里的比例(投影粗判): %d/%d = %.0f%%'
-              % (hit, len(plans), 100.0 * hit / max(1, len(plans))))
+        print('  目标在画面里的比例(投影粗判): %d/%d = %.0f%%%s'
+              % (hit, len(plans), 100.0 * hit / max(1, len(plans)),
+                 ('   (另有 %d 个位姿因"拍不全"被跳过)' % skipped_full[0])
+                 if skipped_full[0] else ''))
         return 0
 
     os.makedirs(a.out, exist_ok=True)

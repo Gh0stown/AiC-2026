@@ -204,9 +204,9 @@
     <include><uri>model://traffic_light_h</uri><name>tl_bot</name><pose>-3.000 0.850 0.002 0 0 0</pose></include>
 
     <!-- ================= C 车牌 (车牌朝 +x) ====================== -->
-    <include><uri>model://car_1</uri><name>car_1</name><pose>3.000 -1.100 0 0 0 3.141593</pose></include>
-    <include><uri>model://car_2</uri><name>car_2</name><pose>3.000 0.100 0 0 0 3.141593</pose></include>
-    <include><uri>model://car_3</uri><name>car_3</name><pose>3.000 1.300 0 0 0 3.141593</pose></include>
+    <include><uri>model://car_1</uri><name>car_1</name><pose>3.000 -1.100 0 0 0 0.000000</pose></include>
+    <include><uri>model://car_2</uri><name>car_2</name><pose>3.000 0.100 0 0 0 0.000000</pose></include>
+    <include><uri>model://car_3</uri><name>car_3</name><pose>3.000 1.300 0 0 0 0.000000</pose></include>
 
   </world>
 </sdf>
