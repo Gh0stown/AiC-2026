@@ -150,6 +150,35 @@ python3 tools/gen_vision_dataset.py --n 200 --out datasets/vision_raw
 > 对训练是好事），car_1/car_3 的车牌清晰可读，`meta.jsonl` 同时记下了
 > **灯态**（green/yellow）与**车牌真值**（苏A·B8Q62 / 苏A·PL12A）。
 
+### 绕圈采集（一次覆盖多角度）
+
+```bash
+roslaunch competition_robot robot_gazebo.launch gui:=false rviz:=false
+# 立牌 + 车牌各绕 12 个视角; 红绿灯每种状态 4 个视角
+python3 tools/gen_vision_dataset.py --mode-mix none \
+    --orbit standee,plate --orbit-views 12 --lights-views 4 --out datasets/vision_orbit
+```
+
+| 参数 | 说明 |
+|---|---|
+| `--orbit standee,plate` | 逗号分隔的目标（类名或物体名）；每个物体绕一圈取 N 个视角 |
+| `--orbit-views 12` | 每个物体几个视角（在扇区内均匀分布） |
+| `--orbit-radius 0.85` | 绕圈半径（m），`--orbit-radius-jitter 0.25` 让尺度有变化 |
+| **`--orbit-arc 120`** | **只取正面扇区**（±60°）。★ 立牌是双面的，走满 360° 有半圈拍到**纯色背板** —— 那些帧若标成 `standee`，模型会学成"看到空白色板就报人偶" |
+| **`--orbit-min-frac 0.5`** | 目标投影宽度不到"正对时"的一半就不采这个视角（薄板在 ±80° 几乎是边对着相机，没价值）|
+| `--lights-views 4` | 红绿灯：每个灯 × **三种状态** × 4 视角；采集时**强制灯态**（`/traffic_light/command`），保证红黄绿均衡，不用等它自己循环 |
+
+用 `set_model_state` **传送**，所以不受可行驶区域限制（能把相机放到街区之间）——
+不需要真的把立牌摆成一个圈。
+
+**实测**（8 个立牌 × 3 视角 + 2 灯 × 3 态 × 2 视角 = 36 张）：
+存下 35 张、**35/35 都拍到对应目标**，灯态 red/yellow/green 都齐 ✓
+
+![绕圈采集样例](orbit_preview.png)
+
+> 同一个立牌在不同角度/距离下的样子（文件名带物体名，如 `000003_orbit_A_south_1.jpg`），
+> 画面里还能顺带拍到灯箱，`meta.jsonl` 记下了当时的**灯态**。
+
 ### 可选：连自动框一起出
 
 ```bash

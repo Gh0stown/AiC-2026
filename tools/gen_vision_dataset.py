@@ -112,14 +112,20 @@ def build_objects():
             continue
         w = float(widths.get(uri, 0.05))
         geom = G.standee_box(p['x'], p['y'], p['yaw'], w)
+        # ★ 立牌的"正面" = 模型局部 -x 面 (实拍标定, 见 gen_standees.py)
+        c, sn = math.cos(p['yaw']), math.sin(p['yaw'])
         objs.append(dict(cls='non_community' if '_F' in uri else 'standee',
-                         name=p['name'], pts=geom['pts'],
+                         name=p['name'], pts=geom['pts'], yaw=p['yaw'],
+                         face=(-c, -sn),
                          extra=dict(model=uri, w=w)))
 
     # ---- 红绿灯灯箱 + 三颗灯珠 (灯珠位置是"读颜色"时要用到的关键点) ----
     for name, lt in G.load_lights().items():
         g = G.light_geom(lt)
-        objs.append(dict(cls='traffic_light', name=name, pts=g['pts'],
+        # 灯珠点亮时沿局部 +x 推出 -> 灯箱正面朝局部 +x
+        c, sn = math.cos(lt['yaw']), math.sin(lt['yaw'])
+        objs.append(dict(cls='traffic_light', name=name, pts=g['pts'], yaw=lt['yaw'],
+                         face=(c, sn),
                          extra=dict(lamps=[[l['color']] + list(l['p']) for l in g['lamps']])))
 
     # ---- 车牌 (唯一真值源: cars.yaml 的位姿 + setup_cars 的车牌局部偏置) ----
@@ -130,7 +136,8 @@ def build_objects():
         cx, cy, yaw = float(c['x']), float(c['y']), float(c.get('yaw', 0.0))
         cc, ss = math.cos(yaw), math.sin(yaw)
         px, py = cx + lx * cc, cy + lx * ss
-        objs.append(dict(cls='plate', name=name,
+        # 车牌贴在车身局部 +x 面 -> 正面朝 (cos yaw, sin yaw)
+        objs.append(dict(cls='plate', name=name, yaw=yaw, face=(cc, ss),
                          pts=_box_pts(px, py, yaw, SC.PLATE_T / 2.0, SC.PLATE_W / 2.0,
                                       lz - SC.PLATE_H / 2.0, lz + SC.PLATE_H / 2.0),
                          extra=dict(plate=c.get('plate', ''))))
@@ -241,6 +248,51 @@ def target_visible(scenario, objects, x, y, yaw, rob, args):
     return False
 
 
+skipped_side = [0]          # 因"太侧"被跳过的视图数 (报给用户看)
+
+
+def centroid(o):
+    return (float(np.mean([q[0] for q in o['pts']])),
+            float(np.mean([q[1] for q in o['pts']])))
+
+
+def orbit_poses(objects, targets, views, radius, arc_deg, rjit, args, rob=None):
+    rob = rob or ROBOT
+    """围绕目标物体取一圈位姿（传送不受路径限制）。
+
+    ★ 为什么默认只取**正面那个扇区**（--orbit-arc 160）:
+      立牌是双面的, 走满 360° 有半圈拍到的是**纯色背板** —— 那些帧如果标成
+      `standee`, 模型就学成"看到空白色板就报人偶"。车牌/灯箱同理（背面没内容）。
+      真实工况也永远从正面接近, 所以正面扇区既够用又干净。
+    """
+    out = []
+    for o in objects:
+        if not any(o['name'].startswith(t) or o['cls'] == t for t in targets):
+            continue
+        cx, cy = centroid(o)
+        fa = math.atan2(o['face'][1], o['face'][0])
+        half = math.radians(arc_deg) / 2.0
+        # 物体自身最大的水平尺寸 —— 用来判断"这个视角是不是侧得看不见了"
+        pts = np.asarray(o['pts'], dtype=float)
+        size_xy = max(pts[:, 0].max() - pts[:, 0].min(),
+                      pts[:, 1].max() - pts[:, 1].min())
+        for k in range(views):
+            th = fa + (0.0 if views == 1 else (-half + 2 * half * k / (views - 1)))
+            r = radius + (rjit * (k / max(1, views - 1) - 0.5) if rjit else 0.0)
+            x, y = cx + r * math.cos(th), cy + r * math.sin(th)
+            yaw = math.atan2(cy - y, cx - x)          # 朝向物体
+            # ★ 太侧就不采: 薄板立牌在 ±80° 几乎是"边对着"相机, 投影只有 20 多 px,
+            #   既没有训练价值, 还会让它掉出 min_box_px 被判成"没拍到目标"。
+            u, v, dep = project(o['pts'], x, y, yaw, rob)
+            w_px = float(u.max() - u.min())
+            face_px = size_xy * rob['fx'] / max(1e-6, float(dep.mean()))
+            if face_px > 0 and w_px < args.orbit_min_frac * face_px:
+                skipped_side[0] += 1
+                continue
+            out.append(('orbit_' + o['name'], 'orbit', x, y, yaw, r))
+    return out
+
+
 def sample_poses(n, rob, blocks, args, objects):
     """-> [(scenario, mode, x, y, yaw, shot_d)]"""
     rng = random.Random(args.seed)
@@ -319,10 +371,19 @@ def split_train_val(poses, val_frac, val_points):
     val_points 里的识别点位整体进 val; 随机/空帧按比例切。
     """
     val, tr = [], []
+    # 绕圈/红绿灯模式: **按物体切** (同一个物体的视角不能既在 train 又在 val,
+    # 否则 val 量的是"记住这个物体"而不是泛化)
+    holdout = set()
+    for p in poses:
+        if p[1] in ('orbit', 'light'):
+            holdout.add(p[0])
+    holdout = set(sorted(holdout)[::max(1, int(round(1.0 / max(1e-6, val_frac))))])
     for p in poses:
         scenario, mode = p[0], p[1]
         if scenario in val_points:
             val.append(p)
+        elif mode in ('orbit', 'light'):
+            (val if scenario in holdout else tr).append(p)
         elif mode in ('random', 'neg'):
             (val if random.random() < val_frac else tr).append(p)
         else:
@@ -355,6 +416,8 @@ def capture(args, poses, out_dir):
         st['stamp'] = m.header.stamp          # ★ 用**图自己的时间戳**判新鲜度
 
     st = dict(img=None, stamp=rospy.Time(0), truth=None, light='?')
+    # 红绿灯模式下强制灯态 —— 节点是唯一写入者, 发命令它就按住不切了
+    cmd_pub = rospy.Publisher('/traffic_light/command', String, queue_size=1)
 
     def on_truth(m):
         q = m.pose.pose.orientation
@@ -384,7 +447,17 @@ def capture(args, poses, out_dir):
     print('开始采集 %d 张 -> %s   (%s)'
           % (len(poses), out_dir, '含 YOLO 框' if args.with_labels else '只出图, 平铺'))
     done = skipped = 0
+    forced = False
     for idx, (scenario, mode, x, y, yaw, _shot_d) in enumerate(poses):
+        # --- 红绿灯: 先强制到目标状态再拍 (每种状态都拍够) ---
+        if mode == 'light':
+            want = scenario.rsplit('_', 1)[-1]
+            if want in ('red', 'yellow', 'green'):
+                cmd_pub.publish(String(data=want))
+                t0 = time.time()
+                while st['light'] != want and time.time() - t0 < 6.0:
+                    rospy.sleep(0.1)
+                forced = True
         # --- 传送 ---
         ms = ModelState()
         ms.model_name = args.robot_model
@@ -459,6 +532,8 @@ def capture(args, poses, out_dir):
         done += 1
         if done % 25 == 0:
             print('  %d/%d (跳过 %d)' % (done, len(poses), skipped))
+    if forced:
+        cmd_pub.publish(String(data='auto'))       # 交还给自动循环
     meta.close()
     if args.with_labels:
         write_data_yaml(out_dir, args.split)
@@ -523,6 +598,22 @@ def main():
                     help='同时写 YOLO 框 (默认只出图; 自动框有残差, 一般不需要)')
     ap.add_argument('--split', action='store_true',
                     help='按 train/val 分子目录存 (默认平铺, 方便导进标注工具)')
+    ap.add_argument('--orbit', default='',
+                    help='绕圈采集: 逗号分隔的目标 (类名 standee/plate 或物体名), '
+                         '空=不采。例: --orbit standee,plate')
+    ap.add_argument('--orbit-views', type=int, default=12, help='每个物体取几个视角')
+    ap.add_argument('--orbit-radius', type=float, default=0.85, help='绕圈半径 (m)')
+    ap.add_argument('--orbit-radius-jitter', type=float, default=0.25,
+                    help='半径抖动 (m), 让尺度有变化; 0=固定半径')
+    ap.add_argument('--orbit-min-frac', type=float, default=0.5,
+                    help='目标投影宽度至少要有"正对时的"这么多倍, 否则这个视角不采 '
+                         '(薄板立牌在 ±80° 几乎边对着相机, 没价值)')
+    ap.add_argument('--orbit-arc', type=float, default=120.0,
+                    help='绕圈的扇区角度。默认 120°(±60°): 薄板在 60° 处投影宽度正好是 '
+                         '正对的 50% (cos60), 再侧就没价值了。'
+                         '360=整圈 —— 注意立牌背面是纯色板, 标成 standee 会教坏模型')
+    ap.add_argument('--lights-views', type=int, default=0,
+                    help='红绿灯: 每个灯 x 每种状态 x 这么多视角; 采集时会**强制**灯态')
     ap.add_argument('--dry-run', action='store_true', help='不连仿真, 只算位姿/标注并打印统计')
     args = ap.parse_args()
 
@@ -530,7 +621,37 @@ def main():
     ROBOT = G.load_robot()
     blocks = G.load_blocks()
     objects = build_objects()
-    poses = sample_poses(args.n, ROBOT, blocks, args, objects)
+    poses = [] if args.mode_mix.strip() in ('', 'none') else \
+        sample_poses(args.n, ROBOT, blocks, args, objects)
+    if args.orbit:
+        targets = [t.strip() for t in args.orbit.split(',') if t.strip()]
+        op = orbit_poses(objects, targets, args.orbit_views, args.orbit_radius,
+                         args.orbit_arc, args.orbit_radius_jitter, args)
+        poses += op
+        if not args.dry_run:
+            print('绕圈: %d 个物体 x %d 视角 = %d 张%s' % (
+                len(set(p[0] for p in op)), args.orbit_views, len(op),
+                (' (另有 %d 个视角太侧被跳过)' % skipped_side[0]) if skipped_side[0] else ''))
+    if args.lights_views:
+        lp = []
+        for o in objects:
+            if o['cls'] != 'traffic_light':
+                continue
+            # 每个灯 x 每种状态 x N 个视角 (状态由 capture 强制, 保证三类均衡)
+            for st in ('red', 'yellow', 'green'):
+                for k in range(args.lights_views):
+                    cx, cy = centroid(o)
+                    fa = math.atan2(o['face'][1], o['face'][0])
+                    half = math.radians(args.orbit_arc) / 2.0
+                    th = fa + (-half + 2 * half * k / max(1, args.lights_views - 1))
+                    r = args.orbit_radius
+                    x, y = cx + r * math.cos(th), cy + r * math.sin(th)
+                    lp.append(('light_%s_%s' % (o['name'], st), 'light', x, y,
+                               math.atan2(cy - y, cx - x), r))
+        poses += lp
+        if not args.dry_run:
+            print('红绿灯: %d 种状态 x %d 视角 x 2 灯 = %d 张' % (
+                args.lights_views, 3, len(lp)))
     args.val_points_set = set(x.strip() for x in args.val_points.split(',') if x.strip())
     tr, val = split_train_val(poses, args.val_frac, args.val_points_set)
 
@@ -539,7 +660,9 @@ def main():
               % (ROBOT['W'], ROBOT['H'], ROBOT['fx'], ROBOT['mount'][2], CAM_Z_MIN))
         print('物体 %d 个: %s' % (len(objects), ', '.join(
             '%s=%d' % (c, sum(1 for o in objects if o['cls'] == c)) for c in CLASSES)))
-        print('采样 %d 个位姿 -> train %d / val %d' % (len(poses), len(tr), len(val)))
+        print('采样 %d 个位姿 -> train %d / val %d %s'
+              % (len(poses), len(tr), len(val),
+                 ('(绕圈跳过 %d 个太侧的视角)' % skipped_side[0]) if skipped_side[0] else ''))
         cnt = {c: 0 for c in CLASSES}
         sizes = {c: [] for c in CLASSES}
         miss = 0
