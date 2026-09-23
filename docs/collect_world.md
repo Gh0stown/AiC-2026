@@ -54,6 +54,24 @@ python3 tools/gen_collect_dataset.py --rig 3 --only-phase plate --out datasets/c
 > 三台相机同时渲染会**三倍渲染开销**。比赛相机大约只占仿真负载的 10%（issue #5 测过），
 > 所以有 GPU 的机器问题不大；本沙箱是软件渲染，跑不动三台。
 
+**验证状态（2026-09-23）**
+
+| 项 | 状态 |
+|---|---|
+| 三台 rig 的话题是否隔离 | ✅ **已验**：`/rig1|2|3/camera/rgb/image_raw` + `camera_info` 六条话题各自独立、都有发布者 |
+| 单机（完整机器人）串行采集 | ✅ **已验**：119 张规划、目标在画面内 119/119、车牌 HyperLPR3 **9/9 全对** |
+| rig 被传送 + 抓帧这一环 | ⚠️ **未验**（沙箱软件渲染带不动 3 个相机）。代码路径与单机版**完全相同**，只差位姿来源从 `/odom_groundtruth` 换成 `/gazebo/get_model_state` |
+| 三进程真正并发 | ⚠️ 未验（同上） |
+
+**你在主力机上花 2 分钟就能补齐这个验证**：
+
+```bash
+# 只跑一台 rig 拍灯 6 张，确认"传送 + 抓帧"通
+python3 tools/gen_collect_dataset.py --rig 2 --only-phase light \
+    --light-dists 1.0 --per 1 --out /tmp/rigtest
+# 通了再跑三台并行; 万一 rig 有坑, 用单机串行(已验)照样能出数据, 只是慢一些
+```
+
 **不加 `--rig`** 就用完整机器人 `competition_robot`（单机串行），三个工位一次跑完：
 
 ```bash
