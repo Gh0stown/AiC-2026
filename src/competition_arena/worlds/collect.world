@@ -188,16 +188,16 @@
     <include><uri>model://collect_rig_3</uri><name>collect_rig_3</name><pose>4.200 0.100 0 0 0 3.141593</pose></include>
 
     <!-- ================= A 立牌圈 (正面全部朝圈心) ================= -->
-    <include><uri>model://standee_c01</uri><name>ring_01</name><pose>0.8000 0.0000 0 0 0 0.000000</pose></include>
-    <include><uri>model://standee_c02</uri><name>ring_02</name><pose>0.6472 0.4702 0 0 0 0.628319</pose></include>
-    <include><uri>model://standee_c03</uri><name>ring_03</name><pose>0.2472 0.7608 0 0 0 1.256637</pose></include>
-    <include><uri>model://standee_c04</uri><name>ring_04</name><pose>-0.2472 0.7608 0 0 0 1.884956</pose></include>
-    <include><uri>model://standee_c05</uri><name>ring_05</name><pose>-0.6472 0.4702 0 0 0 2.513274</pose></include>
-    <include><uri>model://standee_c06</uri><name>ring_06</name><pose>-0.8000 0.0000 0 0 0 3.141593</pose></include>
-    <include><uri>model://standee_c07</uri><name>ring_07</name><pose>-0.6472 -0.4702 0 0 0 3.769911</pose></include>
-    <include><uri>model://standee_c08</uri><name>ring_08</name><pose>-0.2472 -0.7608 0 0 0 4.398230</pose></include>
-    <include><uri>model://standee_F1</uri><name>ring_09</name><pose>0.2472 -0.7608 0 0 0 5.026548</pose></include>
-    <include><uri>model://standee_F2</uri><name>ring_10</name><pose>0.6472 -0.4702 0 0 0 5.654867</pose></include>
+    <include><uri>model://standee_c01</uri><name>ring_01</name><pose>0.6495 -0.3750 0 0 0 -0.523599</pose></include>
+    <include><uri>model://standee_c02</uri><name>ring_02</name><pose>0.6887 -0.2971 0 0 0 -0.407243</pose></include>
+    <include><uri>model://standee_c03</uri><name>ring_03</name><pose>0.7185 -0.2151 0 0 0 -0.290888</pose></include>
+    <include><uri>model://standee_c04</uri><name>ring_04</name><pose>0.7386 -0.1302 0 0 0 -0.174533</pose></include>
+    <include><uri>model://standee_c05</uri><name>ring_05</name><pose>0.7487 -0.0436 0 0 0 -0.058178</pose></include>
+    <include><uri>model://standee_c06</uri><name>ring_06</name><pose>0.7487 0.0436 0 0 0 0.058178</pose></include>
+    <include><uri>model://standee_c07</uri><name>ring_07</name><pose>0.7386 0.1302 0 0 0 0.174533</pose></include>
+    <include><uri>model://standee_c08</uri><name>ring_08</name><pose>0.7185 0.2151 0 0 0 0.290888</pose></include>
+    <include><uri>model://standee_F1</uri><name>ring_09</name><pose>0.6887 0.2971 0 0 0 0.407243</pose></include>
+    <include><uri>model://standee_F2</uri><name>ring_10</name><pose>0.6495 0.3750 0 0 0 0.523599</pose></include>
 
     <!-- ================= B 红绿灯 (正面朝 +x) ==================== -->
     <include><uri>model://traffic_light_h</uri><name>tl_top</name><pose>-3.000 2.050 0.002 0 0 0</pose></include>

@@ -113,6 +113,10 @@ RIG_SDF = """<?xml version="1.0"?>
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--ring-radius', type=float, default=RING_R)
+    ap.add_argument('--ring-arc', type=float, default=360.0,
+                    help='立牌铺成多大的一段弧 (度)。360=整圈(原行为); '
+                         '80 左右=一段弧, 都朝弧心, 相机站弧心 -> '
+                         '一帧能拍到 5~7 个**正面**立牌, 而且没有近侧背板挡画面')
     ap.add_argument('--models', default=','.join(RING_MODELS))
     ap.add_argument('--out-world', default=os.path.join(ARENA, 'worlds', 'collect.world'))
     ap.add_argument('--out-layout', default=os.path.join(ARENA, 'config', 'collect_layout.yaml'))
@@ -192,8 +196,13 @@ def main():
 
     # ---- 工位 A: 立牌圈 (正面朝圈心: 立牌正面 = 模型局部 -x, 所以 yaw = 方位角) ----
     parts += ['', '    <!-- ================= A 立牌圈 (正面全部朝圈心) ================= -->']
+    arc = math.radians(max(1.0, min(360.0, a.ring_arc)))
     for k, m in enumerate(models):
-        th = 2 * math.pi * k / n
+        if arc >= 2 * math.pi - 1e-9:
+            th = 2 * math.pi * k / n                       # 整圈
+        else:
+            # 一段弧: 均分在 -arc/2 ~ +arc/2, 每个仍朝弧心 (yaw = 方位角)
+            th = -arc / 2 + arc * k / max(n - 1, 1)
         x, y = a.ring_radius * math.cos(th), a.ring_radius * math.sin(th)
         parts.append('    <include><uri>model://%s</uri>'
                      '<name>ring_%02d</name>'
@@ -232,7 +241,7 @@ def main():
         note='采集专用世界布局 (tools/build_collect_world.py 生成); '
              'gen_collect_dataset.py 读它来规划拍摄位姿',
         world=a.out_world,
-        ring=dict(radius=a.ring_radius, n=n, center=[0.0, 0.0],
+        ring=dict(radius=a.ring_radius, n=n, arc_deg=a.ring_arc, center=[0.0, 0.0],
                   models=models),
         objects=objects,
     )
@@ -244,8 +253,8 @@ def main():
     print('  %s  (%d 个 include)' % (a.out_world, len(objects)))
     print('  %s' % a.out_layout)
     print()
-    print('  工位 A 立牌圈: %d 个立牌, 半径 %.2f m (弧间距 %.2f m, 每张正面朝圈心)'
-          % (n, a.ring_radius, 2 * math.pi * a.ring_radius / n))
+    print('  工位 A 立牌: %d 个, 半径 %.2f m, 张角 %.0f° (相邻间距 %.2f m, 每个正面朝弧心)'
+          % (n, a.ring_radius, a.ring_arc, arc * a.ring_radius / max(n - 1, 1)))
     print('  工位 B 红绿灯: %d 个, x=%.2f" 正面朝 +x' % (len(LIGHT_YS), LIGHT_X))
     print('  工位 C 车牌:   %d 辆, x=%.2f, 车牌朝 +x' % (len(CAR_YS), CAR_X))
     print('  相机小车 rig:  %d 台 -> %s' % (len(RIGS),

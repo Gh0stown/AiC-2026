@@ -10,10 +10,11 @@ rigs:
   ns: rig3
   camera_topic: /rig3/camera/rgb/image_raw
 note: 采集专用世界布局 (tools/build_collect_world.py 生成); gen_collect_dataset.py 读它来规划拍摄位姿
-world: /home/ghostown/桌面/人工智能算法大赛/src/competition_arena/worlds/collect.world
+world: /home/ubuntu/AiC-2026/src/competition_arena/worlds/collect.world
 ring:
-  radius: 0.8
+  radius: 0.75
   n: 10
+  arc_deg: 60.0
   center:
   - 0.0
   - 0.0
@@ -32,72 +33,72 @@ objects:
 - cls: standee
   name: ring_01
   model: standee_c01
-  x: 0.8
-  y: 0.0
-  yaw: 0.0
+  x: 0.649519052838329
+  y: -0.37499999999999994
+  yaw: -0.5235987755982988
   ring: true
 - cls: standee
   name: ring_02
   model: standee_c02
-  x: 0.647213595499958
-  y: 0.4702282018339785
-  yaw: 0.6283185307179586
+  x: 0.6886620801602055
+  y: -0.2970598245293675
+  yaw: -0.40724349213201017
   ring: true
 - cls: standee
   name: ring_03
   model: standee_c03
-  x: 0.24721359549995797
-  y: 0.7608452130361228
-  yaw: 1.2566370614359172
+  x: 0.7184921342366166
+  y: -0.21510242453331765
+  yaw: -0.29088820866572157
   ring: true
 - cls: standee
   name: ring_04
   model: standee_c04
-  x: -0.2472135954999579
-  y: 0.760845213036123
-  yaw: 1.8849555921538759
+  x: 0.738605814759156
+  y: -0.13023613325019773
+  yaw: -0.17453292519943292
   ring: true
 - cls: standee
   name: ring_05
   model: standee_c05
-  x: -0.6472135954999579
-  y: 0.4702282018339786
-  yaw: 2.5132741228718345
+  x: 0.7487311187034511
+  y: -0.043608621682856875
+  yaw: -0.058177641733144325
   ring: true
 - cls: standee
   name: ring_06
   model: standee_c06
-  x: -0.8
-  y: 9.797174393178826e-17
-  yaw: 3.141592653589793
+  x: 0.7487311187034511
+  y: 0.043608621682856875
+  yaw: 0.058177641733144325
   ring: true
 - cls: standee
   name: ring_07
   model: standee_c07
-  x: -0.647213595499958
-  y: -0.47022820183397845
-  yaw: 3.7699111843077517
+  x: 0.738605814759156
+  y: 0.13023613325019778
+  yaw: 0.17453292519943298
   ring: true
 - cls: standee
   name: ring_08
   model: standee_c08
-  x: -0.24721359549995806
-  y: -0.7608452130361228
-  yaw: 4.39822971502571
+  x: 0.7184921342366166
+  y: 0.21510242453331768
+  yaw: 0.2908882086657216
   ring: true
 - cls: non_community
   name: ring_09
   model: standee_F1
-  x: 0.2472135954999578
-  y: -0.760845213036123
-  yaw: 5.026548245743669
+  x: 0.6886620801602055
+  y: 0.2970598245293675
+  yaw: 0.40724349213201017
   ring: true
 - cls: non_community
   name: ring_10
   model: standee_F2
-  x: 0.6472135954999579
-  y: -0.47022820183397873
-  yaw: 5.654866776461628
+  x: 0.649519052838329
+  y: 0.37499999999999994
+  yaw: 0.5235987755982988
   ring: true
 - cls: traffic_light
   name: tl_top
