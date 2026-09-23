@@ -250,7 +250,9 @@ plate 的 P 0.879 / R 1.000。等标签修好之后重新训一遍即可，网�
 3 类模型（`--drop-classes traffic_light`，48 epoch 早停）：mAP50 **0.897**，
 plate P 0.879 / R 1.000。
 
-推理 2.4 ms/张 @640（约 400 FPS）。权重在 `weights/aic_vision_yolov8n.pt`（6.2 MB）。
+推理 2.4 ms/张 @640（约 400 FPS）。
+> 这个模型用的是**偏掉的投影标签**，已经删掉了（`weights/aic_vision_yolov8n.pt` 不存在了）。
+> 现在可用的推理权重是 `weights/plate_yolo11n.pt` 和 `weights/traffic_light_yolo11n.pt`。
 `weights/` 不入库（`.gitignore` 放行该目录，但 6.2 MB 二进制要不要进 git 由你定）。
 
 ### 端到端 `detect_ocr.py`：暴露上面那个偏移的地方

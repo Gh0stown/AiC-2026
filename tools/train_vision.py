@@ -132,7 +132,7 @@ def main():
     print('  曲线/混淆矩阵: %s/*.png' % os.path.relpath(run_dir, root))
     print()
     print('要把模型交给推理用, 复制到 weights/ (该目录 .gitignore 放行):')
-    print('  cp %s weights/aic_vision_yolov8n.pt' % os.path.relpath(best, root))
+    print('  cp %s weights/vision_yolov8n.pt' % os.path.relpath(best, root))
     return 0
 
 

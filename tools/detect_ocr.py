@@ -96,7 +96,8 @@ def parse_args():
     ap.add_argument('images', nargs='*', help='要识别的图片; 不给就配 --eval')
     ap.add_argument('--eval', action='store_true',
                     help='对着 meta.jsonl 的车牌真值做端到端评估')
-    ap.add_argument('--weights', default='weights/aic_vision_yolov8n.pt')
+    ap.add_argument('--weights', default='weights/plate_yolo11n.pt',
+                    help='车牌检测权重 (单类 plate)')
     ap.add_argument('--val-dir', default='datasets/vision_yolo3/images/val',
                     help='--eval 时用哪个目录的图 (默认 3 类数据集的 val)')
     ap.add_argument('--meta', default='datasets/vision/meta.jsonl')
