@@ -15,7 +15,8 @@
 | 红绿灯 | `traffic_light_yolo11n.pt` | ★ **直接检"亮着的那颗灯珠"**（3 类 red/yellow/green_light），**不是灯箱** | 框的类别 = 灯态 |
 | 车牌 | `plate_yolo11n.pt` + HyperLPR3 | YOLO 框车牌 → 裁剪 → HyperLPR3 读字符 | 车牌字符串 |
 
-模型文件都在 `weights/`（不入库，clone 后需要另行获取）。**缺模型不会崩**：
+模型文件都在 `weights/`（**已入库**，clone 就有；如需换模型直接替换同名文件）。
+**缺模型不会崩**：
 `read_*` 返回空结果, `available()` 会告诉你哪个不可用 —— 这样只训好一部分也能先跑起来。
 """
 from __future__ import annotations
@@ -66,6 +67,12 @@ def load(kind, models_dir=None, quiet=False):
         try:
             from ultralytics import YOLO
             m = YOLO(p)
+        except ImportError as e:                     # ★ 最常见的坑: 用错解释器
+            if not quiet:
+                print('[vision] ✗ 加载 %s 失败: %s' % (os.path.basename(p), e))
+                print('[vision]   多半是用了**系统 python3**（rosrun 默认就是它）。')
+                print('[vision]   请用仓库的 venv:  .venv/bin/python <脚本>')
+                print('[vision]   （vision_detect.py 现在会自动切 venv, 这里只是说明原因）')
         except Exception as e:                       # noqa: BLE001
             if not quiet:
                 print('[vision] 加载 %s 失败: %s' % (os.path.basename(p), e))

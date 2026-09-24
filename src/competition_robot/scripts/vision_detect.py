@@ -48,6 +48,33 @@ import sys
 import threading
 import time
 
+
+def _ensure_venv():
+    """★ rosrun 用的是**系统 python3**, 里面没有 ultralytics / hyperlpr3。
+
+    那样三个模型会全部加载失败, 而"缺模型不崩"的设计会让它**静默报 0 个** ——
+    比赛时会以为"这儿没人"。所以: 如果仓库里有 .venv 且当前解释器不是它, 就自己换过去重跑。
+    找不到 venv 也不崩, 后面会打印明确的提示。
+    """
+    try:
+        import ultralytics                                # noqa: F401
+        return
+    except Exception:                                     # noqa: BLE001
+        pass
+    d = os.path.dirname(os.path.abspath(__file__))
+    for _ in range(8):
+        cand = os.path.join(d, '.venv', 'bin', 'python')
+        if os.path.isfile(cand) and os.path.abspath(cand) != os.path.abspath(sys.executable):
+            print('[vision] 当前解释器没有 ultralytics, 切到 %s 重跑' % cand, flush=True)
+            os.execv(cand, [cand] + sys.argv)             # 环境变量(ROS_*)自动继承
+        nd = os.path.dirname(d)
+        if nd == d:
+            break
+        d = nd
+
+
+_ensure_venv()
+
 import cv2
 import numpy as np
 import rospy
@@ -61,7 +88,27 @@ except ImportError:                                   # 没有 cv_bridge 时也�
 
 # ---- tools/ 里的实现是唯一真值源, 这里不重写 ----
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_WS = os.path.dirname(os.path.dirname(_HERE))         # <仓库根> = catkin 工作区根
+
+
+def _find_ws(start):
+    """往上找到含 tools/vision_infer.py 的那层 = 仓库根。
+
+    ★ 不要用"往上数 N 层": 从源码跑是 <ws>/src/<pkg>/scripts,
+      而 catkin 装完是 <ws>/devel/lib/<pkg> —— 两种深度不同, 数层必错一个。
+      (原来写死 2 层 -> 算成 <ws>/src -> import vision_infer 直接 ModuleNotFoundError)
+    """
+    d = start
+    for _ in range(8):
+        if os.path.isfile(os.path.join(d, 'tools', 'vision_infer.py')):
+            return d
+        nd = os.path.dirname(d)
+        if nd == d:
+            break
+        d = nd
+    return os.path.dirname(os.path.dirname(start))     # 兜底
+
+
+_WS = _find_ws(_HERE)                                  # <仓库根> = catkin 工作区根
 sys.path.insert(0, os.path.join(_WS, 'tools'))
 
 import vision_infer as VI                             # noqa: E402
@@ -75,6 +122,9 @@ CN = {'community': '社区人员', 'non_community': '非社区人员'}
 
 def log(msg=''):
     print(msg, flush=True)
+
+
+_FONT_WARNED = [False]
 
 
 def draw_texts(img_bgr, items):
@@ -93,7 +143,11 @@ def draw_texts(img_bgr, items):
     pil = Image.fromarray(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
     d = ImageDraw.Draw(pil)
     for text, (x, y), (b, g, r), size in items:
-        f, _ = _load_font(int(size))
+        f, cjk_ok = _load_font(int(size))
+        if not cjk_ok and not _FONT_WARNED[0]:
+            _FONT_WARNED[0] = True
+            log('[vision] ⚠ 没找到中文字体, 图上的中文会变成方框 —— '
+                '装一下: sudo apt install -y fonts-noto-cjk')
         # 描边提高可读性（先画黑边再画本色）
         for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
             d.text((x + dx, y + dy), text, font=f, fill=(0, 0, 0))
@@ -110,6 +164,7 @@ class VisionDetect(object):
         self.pose = None
         self.results = []                     # 逐点结果 (落盘用)
         self.blocks = {'A': [0, 0], 'B': [0, 0]}
+        self.point_standee = {}          # 点位 -> (社区数, 非社区数), 只留最新一次
         self.lights = {}
         self.plates = {}
         self.n_saved = 0
@@ -285,11 +340,19 @@ class VisionDetect(object):
             if not exp and self.a.attribute:
                 line += '        ⚠ 没拿到位姿, 未按组归属'
             lines.append(line)
+            # ★ 每个点位只保留**最新一次**结果, 再由点位重算街区合计。
+            #   原来直接 += 累加: 同一个点位被请求两次(重访/重试)就会翻倍
+            #   (实测 A_north 请求两次 -> 10 个变 20 个)。
+            self.point_standee[point] = (c, n)
             blk = point[:1].upper()
-            if blk in 'AB':
+            if blk in ('A', 'B'):                          # 注意别写成 in 'AB': 空 point 会命中
+                tt = [0, 0]
+                for _p, (_c, _n) in self.point_standee.items():
+                    if _p[:1].upper() == blk:
+                        tt[0] += _c
+                        tt[1] += _n
                 self.blocks.setdefault(blk, [0, 0])
-                self.blocks[blk][0] += c
-                self.blocks[blk][1] += n
+                self.blocks[blk][0], self.blocks[blk][1] = tt
         if kind in ('all', 'light'):
             st, cf, box = VI.read_light(frames[-1], conf=0.25, models_dir=self.a.models_dir)
             if st == 'none':
