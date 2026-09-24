@@ -87,7 +87,7 @@ vision_runs/
 
 ## 需要权重 + 没权重会怎样
 
-`weights/*.pt` **不在 git 里**（6.2 MB 二进制由你自己决定放不放），clone 后需要另行获取：
+`weights/*.pt` **已经在 git 里**（三个模型都入库了），clone 下来就有；要换模型直接替换同名文件即可。
 
 ```
 weights/standee_yolo11n.pt   standee_yolo11n.onnx
