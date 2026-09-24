@@ -96,6 +96,18 @@ def full_in_frame(pts, x, y, yaw, rob, margin=8.0):
                  (v >= margin) & (v < rob['H'] - margin)).all())
 
 
+def angles_of(spec):
+    """'0,20,40' -> [0, -40, -20, 0, 20, 40]  (正负都取, 去重排序)
+
+    ★ issue #12: 红绿灯模型在比赛场地只看 recall 63%, 其中 A_south 0/22、A_west 1/16
+      全漏 —— 因为训练时**只有正对**, 没有角度多样性。竞技场里灯是斜着看的。
+      所以采集要按方位角扫一圈 (0=正对, 越大越侧)。
+    """
+    base = [float(v) for v in spec.split(',') if v.strip()]
+    out = sorted(set([0.0] + base + [-v for v in base]))
+    return out
+
+
 def dists_of(spec):
     """'1.0,1.4,1.8' 或 '1.0:2.0:0.25' (起:止:步长) -> 距离列表"""
     if ':' in spec:
@@ -178,46 +190,57 @@ def plan(layout, args, rng):
             plans.append(dict(phase='ring', target=o['name'], x=got[0], y=got[1],
                               yaw=got[2], dist=got[3], light=None))
 
-    # ---- B 红绿灯 (距离扫描 x 三种状态, 且灯箱必须完整在画面里) ----
+    # ---- B 红绿灯 (距离 x 方位角 x 三种状态; 灯箱必须完整在画面里) ----
+    #   ★ issue #12: 方位角维度是必须的 —— 只采正对时, 竞技场里斜看的灯全漏。
     for o in lights:
+        fa = math.atan2(o['face'][1], o['face'][0])      # 灯箱正面朝向
         for st in args.light_states.split(','):
             for d in dists_of(args.light_dists):
+                for adeg in angles_of(args.light_angles):
+                    for _ in range(args.per):
+                        got = None
+                        for _try in range(30):
+                            th = fa + math.radians(adeg + rng.uniform(-3, 3))
+                            rr = d + rng.uniform(-0.05, 0.05)
+                            x = o['x'] + rr * math.cos(th)
+                            y = o['y'] + rr * math.sin(th)
+                            yaw = wrap(math.atan2(o['y'] - y, o['x'] - x)
+                                       + math.radians(rng.uniform(-3, 3)))
+                            if full_in_frame(o['pts'], x, y, yaw, args.rob,
+                                             args.frame_margin):
+                                got = (x, y, yaw)
+                                break
+                        if got is None:
+                            skipped_full[0] += 1
+                            continue
+                        plans.append(dict(phase='light', target=o['name'], x=got[0],
+                                          y=got[1], yaw=got[2], dist=d, angle=adeg,
+                                          light=st.strip()))
+
+    # ---- C 车牌 (距离 x 方位角, 车牌必须完整在画面里) ----
+    for o in cars:
+        fa = math.atan2(o['face'][1], o['face'][0])
+        for d in dists_of(args.car_dists):
+            for adeg in angles_of(args.car_angles):
                 for _ in range(args.per):
                     got = None
                     for _try in range(30):
-                        lat = rng.uniform(-args.lat_jitter, args.lat_jitter)
-                        x = o['x'] + d + rng.uniform(-0.03, 0.03)
-                        y = o['y'] + lat
+                        th = fa + math.radians(adeg + rng.uniform(-3, 3))
+                        rr = d + rng.uniform(-0.04, 0.04)
+                        x = o['x'] + rr * math.cos(th)
+                        y = o['y'] + rr * math.sin(th)
                         yaw = wrap(math.atan2(o['y'] - y, o['x'] - x)
                                    + math.radians(rng.uniform(-4, 4)))
-                        if full_in_frame(o['pts'], x, y, yaw, args.rob, args.frame_margin):
+                        if full_in_frame(o['pts'], x, y, yaw, args.rob,
+                                         args.frame_margin):
                             got = (x, y, yaw)
                             break
                     if got is None:
                         skipped_full[0] += 1
                         continue
-                    plans.append(dict(phase='light', target=o['name'], x=got[0], y=got[1],
-                                      yaw=got[2], dist=d, light=st.strip()))
-
-    # ---- C 车牌 (距离扫描, 车牌必须完整在画面里) ----
-    for o in cars:
-        for d in dists_of(args.car_dists):
-            for _ in range(args.per):
-                got = None
-                for _try in range(30):
-                    lat = rng.uniform(-args.lat_jitter, args.lat_jitter)
-                    x = o['x'] + d + rng.uniform(-0.03, 0.03)
-                    y = o['y'] + lat
-                    yaw = wrap(math.atan2(o['y'] - y, o['x'] - x)
-                               + math.radians(rng.uniform(-5, 5)))
-                    if full_in_frame(o['pts'], x, y, yaw, args.rob, args.frame_margin):
-                        got = (x, y, yaw)
-                        break
-                if got is None:
-                    skipped_full[0] += 1
-                    continue
-                plans.append(dict(phase='plate', target=o['name'], x=got[0], y=got[1],
-                                  yaw=got[2], dist=d, light=None))
+                    plans.append(dict(phase='plate', target=o['name'], x=got[0],
+                                      y=got[1], yaw=got[2], dist=d, angle=adeg,
+                                      light=None))
     return plans, objs
 
 
@@ -332,6 +355,7 @@ def capture(args, plans, objs, out_dir):
         meta.write(json.dumps(dict(
             file='images/%s.%s' % (fn, args.img_ext), phase=p['phase'],
             target=p['target'], dist=round(p['dist'], 3),
+            angle=p.get('angle'),
             pose=[round(p['x'], 4), round(p['y'], 4), round(p['yaw'], 4)],
             pose_truth=[round(lx, 4), round(ly, 4), round(lyaw, 4)],
             light=st['light'], commanded_light=p.get('light'),
@@ -368,6 +392,11 @@ def main():
                     help='红绿灯距离扫描: "起:止:步长" 或逗号列表。'
                          '★ 别小于 1.0m —— 灯箱顶部在 0.68m 就贴到画面边缘了')
     ap.add_argument('--car-dists', default='0.6,0.9,1.2')
+    ap.add_argument('--light-angles', default='0,20,40',
+                    help='红绿灯方位角扫描 (度, 会自动取正负): 0=正对, 越大越侧。'
+                         '★ issue #12: 只采正对 -> 竞技场里斜看的灯全漏 (recall 63%%)')
+    ap.add_argument('--car-angles', default='0,15,30',
+                    help='车牌方位角扫描 (度, 自动取正负)')
     ap.add_argument('--frame-margin', type=float, default=8.0,
                     help='灯箱/车牌要求完整在画面内, 留这么多像素边距')
     ap.add_argument('--img-ext', default='jpg', choices=['jpg', 'png'])
@@ -407,8 +436,10 @@ def main():
             if not ps:
                 continue
             ds = [p['dist'] for p in ps]
-            print('    %-6s 目标 %d 个 x 视角 -> %d 张, 距离 %.2f~%.2f m'
-                  % (ph, len(set(p['target'] for p in ps)), len(ps), min(ds), max(ds)))
+            angs = sorted(set(p.get('angle') for p in ps if p.get('angle') is not None))
+            print('    %-6s 目标 %d 个 x 视角 -> %d 张, 距离 %.2f~%.2f m%s'
+                  % (ph, len(set(p['target'] for p in ps)), len(ps), min(ds), max(ds),
+                     (', 方位角 %s' % angs) if angs else ''))
         # 覆盖率: 每个目标被拍几次
         c = Counter(p['target'] for p in plans)
         print('  每个目标的张数: %s' % dict(sorted(c.items())))
