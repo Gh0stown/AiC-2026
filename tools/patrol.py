@@ -97,7 +97,7 @@ class Patrol(object):
     def ask_vision(self, name, task, index):
         """到识别点位后请求识别节点看一眼, 等结果并打印（拿不到就跳过, 不阻塞跑图）。"""
         if self.a.no_vision or not task or task == 'waypoint':
-            return
+            return None
         kind = {'traffic_light': 'light', 'standee': 'standee',
                 'plate': 'plate'}.get(task, 'all')
         self.vision_res = None
@@ -109,9 +109,56 @@ class Patrol(object):
         if self.vision_res is None:
             rospy.logwarn('     └ 没等到识别结果（vision_detect.py 起了吗? '
                           '超时 %.1fs）' % self.a.vision_timeout)
-            return
+            return None
         for ln in self.vision_res.get('lines', []):
             rospy.loginfo('     └ %s' % ln)
+        return self.vision_res
+
+    LIGHT_CN = {'red': '红灯', 'yellow': '黄灯', 'green': '绿灯', 'none': '没看到灯'}
+
+    def light_gate(self, name, index, first=None):
+        """红绿灯**通行闸** —— 只有确认绿灯才返回 True。
+
+        按交通规则（不是可选项）：
+          * 红灯 / 黄灯 -> 原地停车等待，每隔 light_recheck 秒再看一次
+          * 没看到灯   -> 当作"不能通行"同样等待（免得"看不见就默认走"）
+          * 绿灯       -> 连续 light_confirm 次都读到绿灯才放行（防单帧误检）
+        等超过 light_max_wait 仍未确认绿灯 -> 返回 False（本次运行到此为止），
+        除非显式给了 --light-none-go 才放行。
+
+        ★ 为什么要"连续确认": 识别节点一次请求抓 3 帧取最自信的一颗灯珠，
+          已经有一点冗余；再加一层跨请求确认，能挡掉偶发误检。
+        ★ 为什么这个闸必须在**离开路口前最后**判: 先判灯再去干别的活，等干完
+          灯早变了（灯循环 绿6s->黄2s->红6s）。所以路线里红绿灯排在同地点其它站之后。
+        """
+        if self.a.no_light_gate:
+            return True
+        t0, res, confirm = time.time(), first, 0
+        while not rospy.is_shutdown():
+            st = ((res or {}).get('light') or {}).get('state', 'none')
+            if st == 'green':
+                confirm += 1
+                if confirm >= max(1, self.a.light_confirm):
+                    rospy.loginfo('  [交通灯] 绿灯（连续 %d 次确认）-> 放行' % confirm)
+                    return True
+                rospy.loginfo('  [交通灯] 绿灯（%d/%d 次确认）'
+                              % (confirm, self.a.light_confirm))
+            else:
+                confirm = 0
+                self.stop()
+                rospy.loginfo('  [交通灯] %s -> 原地停车等待（已等 %.0f s）'
+                              % (self.LIGHT_CN.get(st, st), time.time() - t0))
+            if time.time() - t0 > self.a.light_max_wait:
+                if self.a.light_none_go:
+                    rospy.logwarn('  [交通灯] 等了 %.0f s 仍没确认绿灯；'
+                                  '--light-none-go 已给 -> 放行' % (time.time() - t0))
+                    return True
+                rospy.logwarn('  [交通灯] 等了 %.0f s 仍没确认绿灯 -> 停车，'
+                              '本次运行结束' % (time.time() - t0))
+                return False
+            rospy.sleep(self.a.light_recheck)
+            res = self.ask_vision(name, 'traffic_light', index)
+        return False
 
     def cb_scan(self, m):
         self.scan = m
@@ -447,6 +494,16 @@ def main():
     ap.add_argument('--timeout', type=float, default=60.0, help='每段超时(仿真秒)')
     ap.add_argument('--no-vision', action='store_true',
                     help='不做识别联动（不发 /vision/request）')
+    ap.add_argument('--no-light-gate', action='store_true',
+                    help='关掉红绿灯通行闸（默认开: 红/黄灯停车等待, 连续确认绿灯才走）')
+    ap.add_argument('--light-recheck', type=float, default=1.5,
+                    help='等灯时每隔几秒重新识别一次')
+    ap.add_argument('--light-confirm', type=int, default=2,
+                    help='连续几次读到绿灯才放行（防单帧误检）')
+    ap.add_argument('--light-max-wait', type=float, default=60.0,
+                    help='等灯上限(秒); 超时默认停车并结束本次运行')
+    ap.add_argument('--light-none-go', action='store_true',
+                    help='等超时后放行（默认不放行 —— 交通规则优先）')
     ap.add_argument('--vision-timeout', type=float, default=6.0,
                     help='等识别结果的超时 (s)')
     ap.add_argument('--max-w', type=float, default=1.0, help='原地转向最大角速度')
@@ -505,14 +562,25 @@ def main():
                   % math.degrees(wrap(yaw_home)))
 
     ok_n = 0
+    aborted = False
     try:
         while not rospy.is_shutdown():
             for w in wps:
                 if p.go_to(w['name'], w['x'], w['y'], w['yaw']):
                     # 到识别点位 -> 让视觉节点看一眼（点位名去掉序号前缀）
-                    p.ask_vision(str(w['name']).split('_', 1)[-1], w.get('task'),
-                                 str(w['name']).split('_', 1)[0])
+                    pname = str(w['name']).split('_', 1)[-1]
+                    pidx = str(w['name']).split('_', 1)[0]
+                    res = p.ask_vision(pname, w.get('task'), pidx)
+                    # ★ 红绿灯是通行闸: 只有确认绿灯才准继续开（交通规则必须遵守）
+                    if w.get('task') == 'traffic_light' \
+                            and not p.light_gate(pname, pidx, res):
+                        aborted = True
+                        break
                     ok_n += 1
+            if aborted:
+                rospy.logwarn('  [交通灯] 没有确认绿灯 -> 停在原地，本次运行结束'
+                              '（不倒车入库）')
+                break
             if park and a.do_park:
                 # ---- 倒车入库 ----
                 # 1) 先用 move_base(DWA) 开到"起倒点"(库里配的 from, 一般是最后一个航点)

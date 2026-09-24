@@ -104,6 +104,32 @@ def project(poly, p):
     return best
 
 
+# ★ 红绿灯是"通行闸": 必须在**离开这个路口之前**最后判一次。
+#   原来按弧长排会让红绿灯排在同地点的人偶之前 —— 先判灯、再去干别的活,
+#   等干完灯早变了, 结果闯红灯(实测: 判完黄灯继续直走)。所以把跟它同处一地的
+#   其它站点排到它前面。0.3 m 是按当前路线取的: 10/11 站相距 0.082 m, 而跟前后
+#   邻站最近也有 0.61 m, 所以 0.3 能把这一组干净地切出来。
+GATE_R = 0.30
+
+
+def _gate_last(items, radius=GATE_R):
+    """把每个"红绿灯"挪到跟它同一地点的那组站点的最后(组内其它保持原顺序)。"""
+    out, i, n = [], 0, len(items)
+    while i < n:
+        j = i + 1
+        while j < n and math.hypot(items[j]['x'] - items[j - 1]['x'],
+                                   items[j]['y'] - items[j - 1]['y']) <= radius:
+            j += 1
+        grp = items[i:j]
+        if any(g.get('task') == 'traffic_light' for g in grp):
+            lights = [g for g in grp if g.get('task') == 'traffic_light']
+            rest = [g for g in grp if g.get('task') != 'traffic_light']
+            grp = rest + lights
+        out += grp
+        i = j
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--trace', default=os.path.join(WS, 'maps', 'patrol_trace_demo.csv'))
@@ -130,6 +156,7 @@ def main():
                                                                   sum(1 for q2 in rec[:i]
                                                                       if q2['task'] == p['task']) + 1)))
     items.sort(key=lambda it: it['s'])
+    items = _gate_last(items, radius=GATE_R)
     for i, it in enumerate(items, 1):
         it['order'] = i
 

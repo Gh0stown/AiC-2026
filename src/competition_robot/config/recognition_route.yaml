@@ -81,17 +81,7 @@ waypoints:
   - -0.046
   - 0.479
   task: waypoint
-- name: 10_tl_bot
-  world:
-  - -0.11
-  - -0.1309
-  yaw: -1.5704
-  task: traffic_light
-  shot:
-    metric: 灯珠直径 px
-    value: 101.0
-    threshold: 25.0
-- name: 11_B_east
+- name: 10_B_east
   world:
   - -0.0379
   - -0.17
@@ -101,6 +91,16 @@ waypoints:
     metric: 立牌宽 px
     value: 123.1
     threshold: 40.0
+- name: 11_tl_bot
+  world:
+  - -0.11
+  - -0.1309
+  yaw: -1.5704
+  task: traffic_light
+  shot:
+    metric: 灯珠直径 px
+    value: 101.0
+    threshold: 25.0
 - name: 12_bot_c
   world:
   - -0.108
