@@ -36,6 +36,13 @@ def parse_args():
     ap.add_argument('--patience', type=int, default=30, help='多少轮没提升就早停')
     ap.add_argument('--no-cache', action='store_true', help='关掉内存缓存')
     ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--hsv-h', type=float, default=0.02, help='色调抖动 (0~0.5)')
+    ap.add_argument('--hsv-s', type=float, default=0.70, help='饱和度抖动 —— 治明暗/偏色')
+    ap.add_argument('--hsv-v', type=float, default=0.45, help='亮度抖动 —— 治"各种光线"(默认比 ultralytics 的 0.4 略强)')
+    ap.add_argument('--degrees', type=float, default=5.0, help='旋转角度抖动(度) —— 治拍摄倾角')
+    ap.add_argument('--scale', type=float, default=0.50, help='尺度抖动 —— 治远近')
+    ap.add_argument('--translate', type=float, default=0.10, help='平移抖动')
+    ap.add_argument('--mosaic', type=float, default=1.0, help='mosaic 概率')
     return ap.parse_args()
 
 
@@ -112,7 +119,13 @@ def main():
     m.train(data=args.data, epochs=args.epochs, imgsz=args.imgsz, batch=args.batch,
             device=args.device, workers=args.workers, patience=args.patience,
             project=project, name=args.name, exist_ok=True, seed=args.seed,
-            cache=not args.no_cache, plots=True, val=True)
+            cache=not args.no_cache, plots=True, val=True,
+            # ★ issue #14: 光照/色调/角度的增强显式写出来, 别只依赖 ultralytics 默认值。
+            #   原因: 采集世界能造出的光照差很有限(实测同一位姿只换太阳, 亮度差 1~12%),
+            #   而模型要面对的是各种真实光线 —— 这一维只能靠增强补。
+            hsv_h=args.hsv_h, hsv_s=args.hsv_s, hsv_v=args.hsv_v,
+            degrees=args.degrees, scale=args.scale, translate=args.translate,
+            mosaic=args.mosaic)
 
     run_dir = os.path.join(project, args.name)
     best = os.path.join(run_dir, 'weights', 'best.pt')

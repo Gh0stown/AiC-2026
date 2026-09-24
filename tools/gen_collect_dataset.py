@@ -133,6 +133,20 @@ def visible_names(objs, x, y, yaw, rob):
     return names
 
 
+def maybe_visible(o, x, y, yaw, rob, frac=0.25, min_w=10.0):
+    """宽松版可见性: 只要有 1/4 角点在画面里、投影宽 >=10px 就算"拍到了"。
+
+    ★ 为什么不用 visible_names (它要 >=60% 角点 + 宽 >=20px):
+      多样拍摄**故意**要斜视/遮挡/贴边/只露一半的样本 —— 用严格判据会把它们全滤掉,
+      而模型恰恰需要这些。这里只需要保证"画面里不是空的"。
+    """
+    u, v, dep = G_proj(o['pts'], x, y, yaw, rob)
+    if (dep < 0.05).any():
+        return False
+    inside = ((u >= 0) & (u < rob['W']) & (v >= 0) & (v < rob['H']))
+    return bool(inside.mean() >= frac and (u.max() - u.min()) >= min_w)
+
+
 def G_proj(pts, x, y, yaw, rob):
     """与 gen_recognition_points.evaluate 同一套相机数学"""
     p = np.asarray(pts, dtype=float)
@@ -189,6 +203,59 @@ def plan(layout, args, rng):
                 got = (x, y, yaw, math.hypot(o['x'] - cx, o['y'] - cy))
             plans.append(dict(phase='ring', target=o['name'], x=got[0], y=got[1],
                               yaw=got[2], dist=got[3], light=None))
+
+    # ---- A2 立牌圈: **多样拍摄** (批次采集用) ----
+    #   ★ issue #14: 原来只采"从圈里正对拍", 光照单一、角度单一、没有干扰,
+    #     模型一遇到别的光线/别的立牌的背板就崩。这里按"拍摄配方"扫一遍:
+    #       front   圈里正对, 近距离          -> 常规
+    #       oblique 从弧外侧斜看 (偏 30~70 度)  -> 强透视
+    #       along   沿弧方向看                -> 立牌互相遮挡
+    #       behind  从立牌背后看              -> 全是背板(硬负样本, 标的时候别标!)
+    #     再叠一档相机高度偏移, 模拟"拍摄方法不同"。
+    for _ in range(args.ring_div):
+        rec = rng.choice(['front', 'front', 'oblique', 'oblique', 'along', 'behind'])
+        o = rng.choice(standees)
+        th_o = math.atan2(o['y'], o['x'])                   # 立牌在圈上的角度
+        face = (-math.cos(th_o), -math.sin(th_o))           # 正面法向(朝圈心)
+        got = None
+        for _try in range(150):
+            if rec == 'front':
+                ang, rr = th_o + rng.uniform(-0.45, 0.45), rng.uniform(0.10, 0.42)
+            elif rec == 'oblique':
+                ang = th_o + rng.choice([-1, 1]) * rng.uniform(0.55, 1.25)
+                rr = rng.uniform(0.70, 1.20)
+            elif rec == 'along':
+                ang = th_o + rng.choice([-1, 1]) * rng.uniform(0.35, 0.70)
+                rr = rng.uniform(0.55, 0.95)
+            else:                                            # behind
+                # ★ 站到立牌"背后"= 同一个角度、半径**更大**(圈外)。
+                #   原来写成 th_o+pi(穿过圈心到对面), 那样看到的还是正面 —— 实测一张没采到。
+                ang, rr = th_o + rng.uniform(-0.30, 0.30), rng.uniform(1.05, 1.60)
+            x, y = rr * math.cos(ang), rr * math.sin(ang)
+            tgt = rng.choice(standees)
+            yaw = wrap(math.atan2(tgt['y'] - y, tgt['x'] - x)
+                       + math.radians(rng.uniform(-12, 12)))
+            v = (x - o['x'], y - o['y'])
+            nv = math.hypot(*v)
+            if nv < 0.35:                                    # 太近立牌下沿会被切掉
+                continue
+            c = (v[0] * face[0] + v[1] * face[1]) / nv       # 1=正对, -1=正对背面
+            if rec == 'behind' and c > -0.35:
+                continue
+            if rec != 'behind' and c < 0.35:
+                continue
+            # 画面里必须真的拍到这个立牌(宽松判据), 否则这张图是废的
+            if not maybe_visible(o, x, y, yaw, args.rob):
+                continue
+            got = (x, y, yaw, nv)
+            break
+        if got is None:
+            continue
+        plans.append(dict(phase='ring_div', recipe=rec, bucket=args.div_bucket,
+                          target=o['name'], x=got[0], y=got[1], yaw=got[2],
+                          dist=got[3], light=None,
+                          z=args.rob['mount'][2]
+                            + rng.choice([-0.10, 0.0, 0.0, 0.0, 0.10])))
 
     # ---- B 红绿灯 (距离 x 方位角 x 三种状态; 灯箱必须完整在画面里) ----
     #   ★ issue #12: 方位角维度是必须的 —— 只采正对时, 竞技场里斜看的灯全漏。
@@ -310,11 +377,19 @@ def capture(args, plans, objs, out_dir):
 
     img_dir = os.path.join(out_dir, 'images')
     os.makedirs(img_dir, exist_ok=True)
-    meta = open(os.path.join(out_dir, 'meta.jsonl'), 'w')
+    # ★ --append: 分批采集(例如按光照分几批)时, 把新帧接到同一个数据集目录后面,
+    #   不覆盖已有图片和 meta。序号接着往下排, 免得文件重名。
+    idx0 = 0
+    if args.append:
+        idx0 = len([f for f in os.listdir(img_dir) if not f.startswith('.')])
+        meta = open(os.path.join(out_dir, 'meta.jsonl'), 'a')
+        print('追加模式: %s 里已有 %d 张, 新帧从 %04d 开始' % (img_dir, idx0, idx0))
+    else:
+        meta = open(os.path.join(out_dir, 'meta.jsonl'), 'w')
     print('开始采集 %d 张 -> %s' % (len(plans), out_dir))
 
     done = skipped = 0
-    for idx, p in enumerate(plans):
+    for idx, p in enumerate(plans, idx0):
         # 红绿灯: 先强制灯态
         if p['phase'] == 'light' and p['light']:
             cmd.publish(String(data=p['light']))
@@ -327,7 +402,7 @@ def capture(args, plans, objs, out_dir):
         #   相机高度 (mount[2]), 否则相机比投影假设的低 0.18 m, 目标整体被顶出画面。
         #   完整机器人 (competition_robot) 则相反: 它有重力, 落到 0 之后相机正好在
         #   mount[2], 所以给个小 z 让它落下去就行。
-        z = rob['mount'][2] if args.rig else 0.02
+        z = p.get('z', rob['mount'][2] if args.rig else 0.02)
         ms.pose.position.x, ms.pose.position.y, ms.pose.position.z = p['x'], p['y'], z
         ms.pose.orientation.z = math.sin(p['yaw'] / 2.0)
         ms.pose.orientation.w = math.cos(p['yaw'] / 2.0)
@@ -356,6 +431,8 @@ def capture(args, plans, objs, out_dir):
             file='images/%s.%s' % (fn, args.img_ext), phase=p['phase'],
             target=p['target'], dist=round(p['dist'], 3),
             angle=p.get('angle'),
+            recipe=p.get('recipe'), bucket=p.get('bucket'),
+            cam_z=round(float(p.get('z', 0.0)), 4),
             pose=[round(p['x'], 4), round(p['y'], 4), round(p['yaw'], 4)],
             pose_truth=[round(lx, 4), round(ly, 4), round(lyaw, 4)],
             light=st['light'], commanded_light=p.get('light'),
@@ -406,8 +483,14 @@ def main():
                     help='用第几台采集相机小车 (1/2/3); 0=用完整机器人 competition_robot')
     ap.add_argument('--only-phase', default='',
                     help='只拍某个工位: ring / light / plate (三台车并行时各管一个)')
+    ap.add_argument('--ring-div', type=int, default=0,
+                    help='立牌"多样拍摄"张数 (front/oblique/along/behind 四种配方 + 高度偏移)')
+    ap.add_argument('--div-bucket', default='div',
+                    help='本批的名字, 会写进 meta 的 bucket (按光照分批时用来区分)')
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--dry-run', action='store_true', help='不连仿真, 只打印拍摄规划')
+    ap.add_argument('--append', action='store_true',
+                    help='追加到已有数据集目录(分批采集用), 不覆盖已有图/meta')
     a = ap.parse_args()
 
     if not os.path.exists(a.layout):

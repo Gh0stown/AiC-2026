@@ -118,6 +118,10 @@ def main():
                          '80 左右=一段弧, 都朝弧心, 相机站弧心 -> '
                          '一帧能拍到 5~7 个**正面**立牌, 而且没有近侧背板挡画面')
     ap.add_argument('--models', default=','.join(RING_MODELS))
+    ap.add_argument('--sun-diffuse', default='',
+                    help='太阳颜色/亮度 "r,g,b" (0~1)。给了就写死成显式 <light>, 不给就用 model://sun')
+    ap.add_argument('--sun-dir', default='-0.5,0.1,-1',
+                    help='太阳方向 (从光源射出), 配合 --sun-diffuse 用')
     ap.add_argument('--out-world', default=os.path.join(ARENA, 'worlds', 'collect.world'))
     ap.add_argument('--out-layout', default=os.path.join(ARENA, 'config', 'collect_layout.yaml'))
     a = ap.parse_args()
@@ -125,6 +129,22 @@ def main():
     models = [m.strip() for m in a.models.split(',') if m.strip()]
     n = len(models)
     objects = []
+
+    # ★ 光照多样性(issue #14): 采集时可以按批换太阳 —— 一次仿真一套光照,
+    #   分批采完再合起来。比运行时调灯服务可靠(set_light_properties 实测卡住)。
+    if a.sun_diffuse:
+        d = [float(v) for v in a.sun_diffuse.split(',')]
+        dr = [float(v) for v in a.sun_dir.split(',')]
+        sun_xml = ('    <light type="directional" name="sun">\n'
+                   '      <cast_shadows>true</cast_shadows>\n'
+                   '      <pose>0 0 10 0 0 0</pose>\n'
+                   '      <diffuse>%g %g %g 1</diffuse>\n'
+                   '      <specular>0.1 0.1 0.1 1</specular>\n'
+                   '      <direction>%g %g %g</direction>\n'
+                   '    </light>' % (d[0], d[1], d[2], dr[0], dr[1], dr[2]))
+        print('太阳(显式): diffuse=%s direction=%s' % (a.sun_diffuse, a.sun_dir))
+    else:
+        sun_xml = '    <include><uri>model://sun</uri></include>'
 
     parts = ['<?xml version="1.0" ?>',
              '<!--',
@@ -146,7 +166,7 @@ def main():
              '      </solver></ode>',
              '    </physics>',
              '',
-             '    <include><uri>model://sun</uri></include>',
+             sun_xml,
              '',
              '    <!-- ================= 地面: 3x3 平铺, 与比赛场地同观感 ============ -->']
     # ★ arena_floor 在比赛 world 里是**内联**的模型 (不是 model:// 独立模型),
