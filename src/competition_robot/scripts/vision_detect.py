@@ -368,18 +368,28 @@ class VisionDetect(object):
             lines.append('红绿灯: %s（直接检灯珠, conf %.2f）'
                          % (VI.LIGHT_CN.get(st, st), cf))
         if kind in ('all', 'plate'):
-            best, bbox = ('', 0.0), None
+            # ★ 多帧投票, 不是取"最自信的那一次" —— 漏字的那次往往更自信（见 vote_plate 注释）
+            reads = []
             for f in frames:
                 tx, cf, box = VI.read_plate(f, conf=0.25, margin=self.a.plate_margin,
                                             models_dir=self.a.models_dir)
-                if tx and cf > best[1]:
-                    best, bbox = (tx, cf), box
-            out['plate'] = dict(text=best[0], conf=best[1])
-            self.plates[point] = best[0]
+                if tx:
+                    reads.append((tx, cf, box))
+            text, pconf, bbox, votes, nread = vote_plate(reads, self.a.plate_len)
+            out['plate'] = dict(text=text, conf=pconf, votes=votes,
+                                n_frames=len(frames), n_read=nread,
+                                candidates=[t for t, _, _ in reads])
+            self.plates[point] = text
             if bbox:
-                boxes.append(dict(cls='plate', box=bbox, conf=best[1],
-                                  label=best[0] or '车牌'))
-            lines.append('车牌: %s' % (('%s（conf %.2f）' % best) if best[0] else '没读到'))
+                boxes.append(dict(cls='plate', box=bbox, conf=pconf, label=text or '车牌'))
+            if text:
+                line = '车牌: %s（conf %.2f' % (text, pconf)
+                if len(frames) > 1:
+                    line += ', %d/%d 帧读到, 票 %d' % (nread, len(frames), votes)
+                line += '）'
+            else:
+                line = '车牌: 没读到'
+            lines.append(line)
         out['lines'] = lines
         out['boxes'] = boxes
         return out
@@ -493,6 +503,40 @@ def dedup(dets, thr=0.5):
     return keep
 
 
+def norm_plate(t):
+    """车牌归一化: 去掉分隔点/横线/空格, 转大写。用于投票时把"同一个车牌"归到一组。"""
+    return ''.join(ch for ch in (t or '').upper() if ch not in '·-—. ')
+
+
+def vote_plate(readings, want_len=7):
+    """多帧投票 -> (text, conf, box, votes, n_read)
+
+    ★ 为什么不能只取"置信度最高的那一次":
+      这个车牌 OCR 的典型错误是**漏一位**(实测 苏A·PL12A -> 苏APL2A, 置信度还有 0.93),
+      也就是**错的往往比对的更自信** —— 取 max(conf) 正好会挑中错的那个。
+      所以: 先按归一化字符串投票; 再把**长度符合中文车牌(7 位)**的候选排在前面;
+      同票再看置信度。
+
+    readings: [(text, conf, box), ...]  (只放"读到了"的帧)
+    want_len: 期望位数, 0 = 不按长度优先
+    """
+    if not readings:
+        return ('', 0.0, None, 0, 0)
+    grp = {}
+    for t, cf, box in readings:
+        g = grp.setdefault(norm_plate(t), dict(text=t, n=0, conf=0.0, box=box))
+        g['n'] += 1
+        if cf > g['conf']:                       # 这一组里置信度最高的那次作为代表
+            g['conf'], g['text'], g['box'] = cf, t, box
+
+    def rank(g):
+        ln = len(norm_plate(g['text']))
+        return (1 if (want_len and ln == want_len) else 0, g['n'], g['conf'])
+
+    best = max(grp.values(), key=rank)
+    return (best['text'], best['conf'], best['box'], best['n'], len(readings))
+
+
 def hits_any(box, expected, thr=0.25):
     """检测框是否落在"该点位那一组"的任意预期框里（按组归属, 避免把邻居算进来）。"""
     cx, cy = (box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0
@@ -514,6 +558,8 @@ def main():
     ap.add_argument('--conf', type=float, default=0.3, help='立牌检测置信度阈值')
     ap.add_argument('--plate-margin', type=float, default=10,
                     help='车牌裁剪外扩 px（纯识别网络偏好紧裁剪, 10 左右合适）')
+    ap.add_argument('--plate-len', type=int, default=7,
+                    help='中文车牌位数; 多帧投票时优先选这个长度的候选 (0=不按长度优先)')
     ap.add_argument('--frames', type=int, default=3, help='每次请求取几帧做去重合并')
     ap.add_argument('--frame-gap', type=float, default=0.15)
     ap.add_argument('--show', dest='show', action='store_true', default=True,
