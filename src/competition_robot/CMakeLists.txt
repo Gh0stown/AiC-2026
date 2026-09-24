@@ -43,6 +43,8 @@ set_target_properties(competition_holonomic_drive PROPERTIES
 # ---------------------------------------------------------------------------
 catkin_install_python(PROGRAMS
   scripts/gen_robot.py
+  scripts/vision_detect.py
+  scripts/patrol.py
   scripts/mecanum.py
   scripts/mecanum_odometry.py
   scripts/sim_wheel_encoders.py

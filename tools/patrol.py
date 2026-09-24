@@ -41,6 +41,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import sys
@@ -54,6 +55,7 @@ import yaml
 from geometry_msgs.msg import PoseStamped, Twist
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from nav_msgs.msg import Odometry
+from std_msgs.msg import String
 from sensor_msgs.msg import LaserScan
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -79,6 +81,37 @@ class Patrol(object):
         self.trace = []
         rospy.Subscriber('/odom_groundtruth', Odometry, self.cb_gt, queue_size=50)
         rospy.Subscriber('/scan', LaserScan, self.cb_scan, queue_size=5)
+        # ---- 识别联动: 到识别点位时请求一次识别, 并把结果打进本日志 ----
+        #   ★ 识别是独立节点 (src/competition_robot/scripts/vision_detect.py) ——
+        #     比赛方要的是 roslaunch 起世界 + rosrun 起节点, 不搞"一个脚本全包"。
+        self.vision_pub = rospy.Publisher('/vision/request', String, queue_size=5)
+        self.vision_res = None
+        rospy.Subscriber('/vision/result', String, self.cb_vision, queue_size=5)
+
+    def cb_vision(self, m):
+        try:
+            self.vision_res = json.loads(m.data)
+        except Exception:                       # noqa: BLE001
+            self.vision_res = None
+
+    def ask_vision(self, name, task, index):
+        """到识别点位后请求识别节点看一眼, 等结果并打印（拿不到就跳过, 不阻塞跑图）。"""
+        if self.a.no_vision or not task or task == 'waypoint':
+            return
+        kind = {'traffic_light': 'light', 'standee': 'standee',
+                'plate': 'plate'}.get(task, 'all')
+        self.vision_res = None
+        self.vision_pub.publish(String(data=json.dumps(
+            dict(point=name, kind=kind, index=index), ensure_ascii=False)))
+        t0 = time.time()
+        while self.vision_res is None and time.time() - t0 < self.a.vision_timeout:
+            rospy.sleep(0.1)
+        if self.vision_res is None:
+            rospy.logwarn('     └ 没等到识别结果（vision_detect.py 起了吗? '
+                          '超时 %.1fs）' % self.a.vision_timeout)
+            return
+        for ln in self.vision_res.get('lines', []):
+            rospy.loginfo('     └ %s' % ln)
 
     def cb_scan(self, m):
         self.scan = m
@@ -412,6 +445,10 @@ def main():
     ap.add_argument('--no-pre-rotate', dest='pre_rotate', action='store_false')
     ap.add_argument('--loop', action='store_true')
     ap.add_argument('--timeout', type=float, default=60.0, help='每段超时(仿真秒)')
+    ap.add_argument('--no-vision', action='store_true',
+                    help='不做识别联动（不发 /vision/request）')
+    ap.add_argument('--vision-timeout', type=float, default=6.0,
+                    help='等识别结果的超时 (s)')
     ap.add_argument('--max-w', type=float, default=1.0, help='原地转向最大角速度')
     ap.add_argument('--k-w', type=float, default=1.2, help='转向 P 增益')
     ap.add_argument('--save-trace', help='把轨迹存成 csv')
@@ -472,6 +509,9 @@ def main():
         while not rospy.is_shutdown():
             for w in wps:
                 if p.go_to(w['name'], w['x'], w['y'], w['yaw']):
+                    # 到识别点位 -> 让视觉节点看一眼（点位名去掉序号前缀）
+                    p.ask_vision(str(w['name']).split('_', 1)[-1], w.get('task'),
+                                 str(w['name']).split('_', 1)[0])
                     ok_n += 1
             if park and a.do_park:
                 # ---- 倒车入库 ----
@@ -497,6 +537,11 @@ def main():
             else:
                 if return_to and not a.no_return_start:
                     p.go_to('return', return_to[0], return_to[1], yaw_home)
+                try:
+                    p.vision_pub.publish(String(data=''))       # 让识别节点打印/落盘汇总
+                    rospy.sleep(0.5)
+                except Exception:                               # noqa: BLE001
+                    pass
                 rospy.loginfo('一圈跑完: %d/%d 个航点成功' % (ok_n, len(wps)))
             if not a.loop:
                 break
