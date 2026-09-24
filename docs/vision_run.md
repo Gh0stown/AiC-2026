@@ -98,6 +98,29 @@ weights/plate_yolo11n.pt      plate_yolo11n.onnx
 缺哪个，启动时会明确打印，**该任务输出"没识别到"但整条流程照跑**（不会崩）。
 只训好一部分也能先演示。
 
+## 推理设备：默认 CPU（**别随便改成 GPU**）
+
+三个 `read_*` 和识别节点都默认 `--device cpu`。
+
+**为什么**: 这三个模型都是 yolo11n（各 5 MB），CPU 上 **立牌 79 ms / 灯 42 ms / 车牌 113 ms**
+一张，识别节点一次请求抓 3 帧也就几百毫秒 —— 完全不缺那点速度。
+而 WSL 的**显存是和 Windows 共享的**（`nvidia-smi` 显示的 8188 MiB 是整张卡，Windows 那边
+浏览器/代理也在用），`Gazebo + RViz + torch` 一起抢就是 **CUDA OOM**，而 WSL 上 CUDA 崩
+**会把整个 WSL 带下去**（实测：一到识别就 `RuntimeError: CUDA error: out of memory`，
+然后 WSL 直接退出，终端全没了）。
+
+实测对照（Gazebo + 导航同时在跑）：
+
+| | 显存 | 结果 |
+|---|---|---|
+| `--device 0`（GPU） | 爆 | CUDA OOM，WSL 退出 |
+| `--device cpu`（默认） | 172 MiB | 三个任务全跑完 ✓ |
+
+真要上显卡（比如以后换了大显存独立机）：先 `nvidia-smi` 看空闲显存，
+再 `rosrun competition_robot vision_detect.py --device 0`。
+另外识别节点现在会把**单次识别出错**包起来（打印原因、发一条带 `error` 的结果、节点继续），
+不会再因为一次异常丢掉整轮。
+
 ## 单独测（不用 ROS）
 
 ```bash

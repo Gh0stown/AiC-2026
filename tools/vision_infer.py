@@ -7,6 +7,10 @@
 * `src/competition_robot/scripts/vision_detect.py`（ROS 节点）调它；
 * 也可以直接命令行单测：`python3 tools/vision_infer.py 图片...`
 
+★ 设备: 三个 `read_*` 默认 **device='cpu'**。这些是 yolo11n(各 5MB), CPU 几毫秒一张,
+  没必要占显存; 而 WSL 的显存是和 Windows **共享**的, 跟 Gazebo 抢会 CUDA OOM,
+  严重时整个 WSL 直接退出(实测)。要上显卡就显式传 device='cuda:0'。
+
 三个任务的口径（很重要，别搞混）
 --------------------------------
 | 任务 | 模型 | 检的是什么 | 输出 |
@@ -88,12 +92,12 @@ def available(models_dir=None):
 
 
 # ---------------------------------------------------------------- 人偶立牌
-def read_standees(image_bgr, conf=0.3, model=None, models_dir=None):
+def read_standees(image_bgr, conf=0.3, model=None, models_dir=None, device='cpu'):
     """-> [{'cls': 'community'|'non_community', 'conf': float, 'box': [x0,y0,x1,y1]}]"""
     m = model or load('standee', models_dir)
     if m is None:
         return []
-    r = m.predict(image_bgr, conf=conf, verbose=False)[0]
+    r = m.predict(image_bgr, conf=conf, verbose=False, device=device)[0]
     out = []
     for b in r.boxes:
         raw = m.names[int(b.cls.item())]
@@ -112,7 +116,7 @@ def count_standees(dets):
 
 
 # ---------------------------------------------------------------- 红绿灯
-def read_light(image_bgr, conf=0.25, model=None, models_dir=None):
+def read_light(image_bgr, conf=0.25, model=None, models_dir=None, device='cpu'):
     """★ 检的是**亮着的灯珠**（不是灯箱）。-> (状态, 置信度, 框)
 
     状态: 'red' / 'yellow' / 'green' / 'none'
@@ -121,21 +125,21 @@ def read_light(image_bgr, conf=0.25, model=None, models_dir=None):
     if m is None:
         return ('none', 0.0, None)
     import traffic_light_yolo as T
-    return T.read_state(image_bgr, conf=conf, model=m)
+    return T.read_state(image_bgr, conf=conf, model=m, device=device)
 
 
-def read_lights(image_bgr, conf=0.25, model=None, models_dir=None):
+def read_lights(image_bgr, conf=0.25, model=None, models_dir=None, device='cpu'):
     """所有灯珠（按置信度降序）-> [(状态, 置信度, 框), ...]；一帧通常只有 1 个。"""
     m = model or load('light', models_dir)
     if m is None:
         return []
     import traffic_light_yolo as T
-    return T.read_states(image_bgr, conf=conf, model=m)
+    return T.read_states(image_bgr, conf=conf, model=m, device=device)
 
 
 # ---------------------------------------------------------------- 车牌
 def read_plate(image_bgr, conf=0.25, margin=10, model=None, models_dir=None,
-               return_all=False):
+               return_all=False, device='cpu'):
     """YOLO 框车牌 -> 裁剪(外扩 margin) -> HyperLPR3 读字符。-> (字符串, 置信度, 框)
 
     ★ margin 别给 0：HyperLPR3 的**检测器**要背景（紧裁剪会直接失败），
@@ -147,7 +151,7 @@ def read_plate(image_bgr, conf=0.25, margin=10, model=None, models_dir=None,
         return ('', 0.0, None)
     import plate_ocr
     import detect_ocr as D
-    r = m.predict(image_bgr, conf=conf, verbose=False)[0]
+    r = m.predict(image_bgr, conf=conf, verbose=False, device=device)[0]
     boxes = [b for b in r.boxes if str(r.names[int(b.cls.item())]).lower() == 'plate']
     if not boxes:
         return ('', 0.0, None)

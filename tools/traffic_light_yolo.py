@@ -51,13 +51,13 @@ def _model(path=None):
     return _MODEL
 
 
-def read_states(image_bgr, conf=0.25, model=None):
+def read_states(image_bgr, conf=0.25, model=None, device=None):
     """返回 [(状态, 置信度, 框), ...]，按置信度从高到低。
 
     状态是 'red' / 'yellow' / 'green'（已去掉 `_light` 后缀）。
     """
     m = model or _model()
-    r = m.predict(image_bgr, conf=conf, verbose=False)[0]
+    r = m.predict(image_bgr, conf=conf, verbose=False, device=device)[0]
     out = []
     for b in r.boxes:
         name = m.names[int(b.cls.item())]
@@ -67,9 +67,14 @@ def read_states(image_bgr, conf=0.25, model=None):
     return out
 
 
-def read_state(image_bgr, conf=0.25, model=None):
-    """只要一个结果 -> (状态, 置信度, 框)；没检出就是 ('none', 0.0, None)。"""
-    s = read_states(image_bgr, conf=conf, model=model)
+def read_state(image_bgr, conf=0.25, model=None, device=None):
+    """只要一个结果 -> (状态, 置信度, 框)；没检出就是 ('none', 0.0, None)。
+
+    device: None=让 ultralytics 自己选(有显卡就用显卡); 'cpu'=强制 CPU。
+            ★ 在 WSL 里跟 Gazebo 同时跑时**务必用 'cpu'** —— WSL 的显存和 Windows
+              共享, 抢不过就 CUDA OOM, 严重时会把整个 WSL 带下去(实测)。
+    """
+    s = read_states(image_bgr, conf=conf, model=model, device=device)
     return s[0] if s else ('none', 0.0, None)
 
 
@@ -79,6 +84,8 @@ def main(argv=None):
     ap.add_argument('--dir', help='目录（批量）')
     ap.add_argument('--model', default=DEFAULT_MODEL)
     ap.add_argument('--conf', type=float, default=0.25)
+    ap.add_argument('--device', default='cpu',
+                    help='cpu (默认, 稳) / 0 / cuda:0。WSL 里跟 Gazebo 抢显存会 OOM')
     ap.add_argument('--json', action='store_true', help='输出 JSON')
     args = ap.parse_args(argv)
 
@@ -102,7 +109,7 @@ def main(argv=None):
         if im is None:
             results.append(dict(file=f, state='ERROR', conf=0.0, boxes=[]))
             continue
-        st = read_states(im, conf=args.conf, model=m)
+        st = read_states(im, conf=args.conf, model=m, device=args.device)
         state = st[0][0] if st else 'none'
         results.append(dict(file=f, state=state,
                             conf=st[0][1] if st else 0.0,

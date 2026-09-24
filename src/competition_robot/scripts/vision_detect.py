@@ -192,6 +192,7 @@ class VisionDetect(object):
             if not v:
                 log('  ⚠ %s 的模型缺失, 这一项会输出"没识别到"' % k)
         log('  相机 %s   请求 /vision/request   汇总 /vision/summary' % a.image_topic)
+        log('  推理设备 %s' % a.device)
         log('  本次结果存到: %s' % self.run_dir)
         if not a.show:
             log('  （--no-show: 不弹窗）')
@@ -293,7 +294,15 @@ class VisionDetect(object):
         if not frames:
             log('[vision] 没拿到图像（相机没数据?）')
             return
-        res = self.recognize(frames, point, kind)
+        try:
+            res = self.recognize(frames, point, kind)
+        except Exception as e:                              # noqa: BLE001
+            log('[vision] ✗ 识别出错（这一站跳过, 节点继续）: %s: %s' % (type(e).__name__, e))
+            if 'CUDA' in str(e) or 'out of memory' in str(e).lower():
+                log('[vision]   显存不够。加 --device cpu（默认已是 cpu；显式传了 cuda 才会这样）')
+            self.pub.publish(String(data=json.dumps(
+                dict(point=point, index=idx, kind=kind, error=str(e)), ensure_ascii=False)))
+            return
         res.update(point=point, index=idx, kind=kind,
                    stamp=time.strftime('%Y-%m-%d %H:%M:%S'))
         self.results.append(res)
@@ -323,7 +332,8 @@ class VisionDetect(object):
         if kind in ('all', 'standee'):
             ds = []
             for f in frames:
-                ds += VI.read_standees(f, conf=self.a.conf, models_dir=self.a.models_dir)
+                ds += VI.read_standees(f, conf=self.a.conf, models_dir=self.a.models_dir,
+                                      device=self.a.device)
             ds = dedup(ds)
             exp = self._expected_boxes(point, pose) if self.a.attribute else None
             kept, extra = ds, 0
@@ -354,10 +364,13 @@ class VisionDetect(object):
                 self.blocks.setdefault(blk, [0, 0])
                 self.blocks[blk][0], self.blocks[blk][1] = tt
         if kind in ('all', 'light'):
-            st, cf, box = VI.read_light(frames[-1], conf=0.25, models_dir=self.a.models_dir)
+            st, cf, box = VI.read_light(frames[-1], conf=0.25,
+                                        models_dir=self.a.models_dir, device=self.a.device)
             if st == 'none':
                 for f in frames[::-1]:
-                    st, cf, box = VI.read_light(f, conf=0.25, models_dir=self.a.models_dir)
+                    st, cf, box = VI.read_light(f, conf=0.25,
+                                                models_dir=self.a.models_dir,
+                                                device=self.a.device)
                     if st != 'none':
                         break
             out['light'] = dict(state=st, conf=cf)
@@ -372,7 +385,8 @@ class VisionDetect(object):
             reads = []
             for f in frames:
                 tx, cf, box = VI.read_plate(f, conf=0.25, margin=self.a.plate_margin,
-                                            models_dir=self.a.models_dir)
+                                            models_dir=self.a.models_dir,
+                                            device=self.a.device)
                 if tx:
                     reads.append((tx, cf, box))
             text, pconf, bbox, votes, nread = vote_plate(reads, self.a.plate_len)
@@ -556,6 +570,10 @@ def main():
                     help='结果总文件夹 (默认 <仓库根>/vision_runs); 每次运行一个子文件夹')
     ap.add_argument('--tag', default=None, help='给本次运行的文件夹加个后缀')
     ap.add_argument('--conf', type=float, default=0.3, help='立牌检测置信度阈值')
+    ap.add_argument('--device', default='cpu',
+                    help='推理设备: cpu (默认) / 0 / cuda:0。'
+                         '★ 默认 cpu 是故意的 —— 这三个 yolo11n 在 CPU 上就够快, 而 WSL 的'
+                         '显存和 Windows 共享, 跟 Gazebo 抢会 CUDA OOM, 实测会把整个 WSL 带下去')
     ap.add_argument('--plate-margin', type=float, default=10,
                     help='车牌裁剪外扩 px（纯识别网络偏好紧裁剪, 10 左右合适）')
     ap.add_argument('--plate-len', type=int, default=7,
