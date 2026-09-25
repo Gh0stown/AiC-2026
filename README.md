@@ -461,6 +461,59 @@ python3 tools/gen_recognition_route.py     # 把识别点按弧长插进巡检�
 AMCL 到点误差均值 0.056 m、原地转向残余 ≤1.0°、一圈 166 s。
 路线图 `docs/recognition_route.png`（红=实测轨迹，橙=规划环线，数字=顺序）。
 
+### 三个识别模型（已入库，clone 即用）
+
+| 任务 | 权重 | 类别 | 实测 |
+|---|---|---|---|
+| 人偶立牌 | `weights/standee_yolo11n.pt` | `comm` / `non_comm` | 密集正方形数据自测：精确 **92.5%**、召回 **98.7%**；真实场地 5 个点位计数 **10/10** |
+| 车牌 | `weights/plate_yolo11n.pt` | `plate` | 自采 105 张端到端 OCR **105/105**；独立场地数据 **87%** |
+| 红绿灯 | `weights/traffic_light_yolo11n.pt` | `red` / `yellow` / `green_light` | 自采 90 张 **90/90**；**直接检「亮着的那颗灯珠」**，不检灯箱 |
+
+推理默认走 **CPU**（`--device cpu`）：三个都是 yolo11n，CPU 上立牌 79 ms / 灯 42 ms / 车牌 113 ms
+一张，够用；而 WSL 的显存和 Windows 共享，跟 Gazebo 抢会 CUDA OOM，严重时把整个 WSL 带下去（实测踩过）。
+
+### 识别节点与巡检联动（比赛用法：roslaunch + rosrun）
+
+```bash
+rosrun competition_robot vision_detect.py            # ② 识别节点（会弹带框结果图）
+rosrun competition_robot patrol.py \
+    --file $(rospack find competition_robot)/config/recognition_route.yaml   # ③ 巡检并自动请求识别
+```
+
+* 节点订阅 `/camera/rgb/image_raw`；`/vision/request`（JSON）触发一次识别，结果发 `/vision/result`。
+* **红绿灯是通行闸**：红/黄灯（以及「没看到灯」）原地停车等待，**确认绿灯才放行**；等超时默认停车结束。
+  `--light-confirm` 默认 1 —— 节点已在**一次请求内做了 3 帧投票**，不用再等第二轮
+  （灯时长见 `src/competition_arena/config/traffic_lights.yaml`，现为 绿15/黄3/红10 s）。
+* 每次运行独立存档 `vision_runs/<时间戳>/`：带框结果图 + `summary.txt` + `results.json`。
+* 详细用法 / 话题表 / 标注约定见 [`docs/vision_run.md`](docs/vision_run.md)；
+  采集世界布局见 [`docs/collect_world.md`](docs/collect_world.md)；
+  一步一坑的排查记录见 [`docs/issue_log.md`](docs/issue_log.md)（16 条）。
+
+### 数据集怎么来的（只出图，框手工标）
+
+```bash
+python3 tools/build_collect_world.py --shape square --side 0.55        # 造采集世界
+.venv/bin/python tools/gen_collect_dataset.py --rig 1 --out datasets/collect_square \
+    --only-phase square --square 240 --div-bucket dense_day            # 采 240 张
+```
+
+采集世界（`collect.world`）只放**相机小车 + 要识别的道具**：立牌（弧形圈或正方形）、红绿灯、车牌。
+`gen_collect_dataset.py` 只出图 + `meta.jsonl`（位姿 / 灯态 / 车牌真值），**框由人在 X-AnyLabeling 里标**。
+立牌数据两种摆放：**密集正方形**（边长 0.55 m、正面朝外、相机在外圈拍，每张强制「正面 + 别人背面」同框 ——
+专治「把别的立牌的白色背板认成人」）和弧形圈多样拍摄（正对 / 斜视 / 遮挡 / 纯背面四种配方 + 三档相机高度）。
+
+### 仓库里哪些是「最终实现」，中间产物在哪
+
+* **最终实现**：`src/competition_arena`（场地与道具）、`src/competition_robot`（机器人 / 导航 / 视觉节点 / 路线）、
+  `tools/`（点位与路线生成、采集与训练、推理与 OCR、巡航与验收）、`weights/`（三个模型）、
+  `maps/arena_clean.*`（导航地图）、`docs/`（技术文档），以及根目录的 `README.md`、`验收指南.md`、
+  `交接文档.md`、`复赛要求与差距分析.md`、`PROGRESS.md`。
+* **中间产物**：早期为调仿真 / 建图 / 雷达写的一次性脚本（`tools/bench_*`、`tools/test_mapping*.sh`、
+  `tools/check_*.py|sh` 等）**仍在仓库里** —— 它们是各阶段问题的排查证据，`docs/issue_log.md`
+  与 `验收指南.md` 直接引用。已废弃的「几何投影自动标注」管线（`meta_to_yolo.py`、
+  `gen_vision_dataset.py`）和几张 benchmark 地图则已移出（下方归档分支里都有）。
+* **完整逐步开发历史**在归档分支：`git checkout archive/sim-dev`（tag `archive/sim-dev-2026-09-25`）。
+
 ### 换到显卡机
 
 ```bash
@@ -468,6 +521,7 @@ git clone git@github.com:Gh0stown/AiC-2026.git && cd AiC-2026
 tools/setup_vision_env.sh --cuda 121
 ```
 
-`.venv/`、`.cache/`、`datasets/`、`runs/`、`*.pt`、`*.onnx` **都不入库**（体积大），
-脚本会自动重建或重新下载，**不需要手工拷贝**。
+`.venv/`、`.cache/`、`datasets/`、`runs/` **不入库**（体积大，脚本会重建）。
+但 **三个模型的权重已经入库**（`weights/`，6 个文件约 52 MB）：clone 下来就能直接跑识别，
+不用再手工拷权重；要换模型替换同名文件即可。
 若显卡机是 Python 3.10+，可以放开 torch 版本上限：`TORCH_VER=2.5.1 tools/setup_vision_env.sh --cuda 121`

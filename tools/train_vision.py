@@ -2,7 +2,9 @@
 # -*- coding: utf-8 -*-
 """训练视觉检测模型 (YOLO)。
 
-前置: 先跑 `python3 tools/meta_to_yolo.py` 生成 datasets/vision_yolo/。
+前置: 先准备好一个 YOLO 格式数据集 (images/labels + data.yaml) ——
+      现在用 X-AnyLabeling 标注导出。
+      (旧的 meta_to_yolo.py「几何投影自动标框」路线已废弃并移出仓库, 见归档分支 archive/sim-dev)
 
 为什么要有这个脚本 (而不直接 `yolo detect train`):
   * `project=` 如果给相对路径, ultralytics 会把它拼到自己的 runs_dir 下面, 于是
@@ -100,7 +102,7 @@ def main():
     os.chdir(root)
 
     if not os.path.isfile(args.data):
-        sys.exit('找不到 %s —— 先跑: python3 tools/meta_to_yolo.py' % args.data)
+        sys.exit('找不到 %s —— 先准备 YOLO 数据集: images/labels + data.yaml' % args.data)
 
     print('================ 体检 ================')
     if not preflight():

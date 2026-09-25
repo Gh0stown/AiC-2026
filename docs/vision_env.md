@@ -210,12 +210,17 @@ TORCH_VER=2.5.1 tools/setup_vision_env.sh --cuda 121
 
 ### 已经确认的部分（这些仍然有效）
 
+> ★ `gen_vision_dataset.py` / `meta_to_yolo.py` 这条**几何投影自动标框**路线已废弃并移出仓库
+> （投影框和画面对不上，见 `docs/vision_plan.md`）；现在用 `build_collect_world.py` +
+> `gen_collect_dataset.py` 采图、手工标注。需要旧脚本见归档分支 `archive/sim-dev`。
+
 `tools/gen_vision_dataset.py` 把每个目标的像素框写进了 `datasets/vision/meta.jsonl`
 （用 Gazebo 真值位姿做几何投影，带可见度 >=0.6 和小框过滤）。转成 YOLO 目录结构用：
 
 ```bash
-.venv/bin/python tools/meta_to_yolo.py          # -> datasets/vision_yolo/ (软链接, 不复制图片)
-.venv/bin/python tools/meta_to_yolo.py --out datasets/vision_yolo3 --drop-classes traffic_light
+# ↓ 以下命令属于已废弃路线, 脚本已移出仓库 (见上方说明 / 归档分支 archive/sim-dev)
+# .venv/bin/python tools/meta_to_yolo.py          # -> datasets/vision_yolo/ (软链接, 不复制图片)
+# .venv/bin/python tools/meta_to_yolo.py --out datasets/vision_yolo3 --drop-classes traffic_light
 ```
 
 按**整段 scenario** 留 val（同一段轨迹相邻帧几乎一样，随机抽帧会让 val 虚高）：

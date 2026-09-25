@@ -109,7 +109,9 @@ YOLO 检车牌  ->  裁下来（留一点边距）  ->  plate_ocr.recognize() �
 
 ## 3.5 数据集怎么造（合成数据，零手工标注）
 
-工具：`tools/gen_vision_dataset.py`（生成）+ `tools/preview_dataset.py`（预览/统计）
+> ★ **这条路线已被取代**：`gen_vision_dataset.py` 用**几何投影自动标框**，下文自己也测出「投影框和画面对不上」。现在走 `tools/build_collect_world.py`（造采集世界）+ `tools/gen_collect_dataset.py`（**只出图**，框在 X-AnyLabeling 里手工标）。该脚本已移出仓库，需要时见归档分支 `archive/sim-dev`。
+
+工具：~~`tools/gen_vision_dataset.py`~~（已废弃、已移出）+ `tools/preview_dataset.py`（预览/统计，仍在）
 
 ### 默认：只出图，手工标注（X-AnyLabeling）
 
