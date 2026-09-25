@@ -307,8 +307,12 @@ def main():
     print('  %s  (%d 个 include)' % (a.out_world, len(objects)))
     print('  %s' % a.out_layout)
     print()
-    print('  工位 A 立牌: %d 个, 半径 %.2f m, 张角 %.0f° (相邻间距 %.2f m, 每个正面朝弧心)'
-          % (n, a.ring_radius, a.ring_arc, arc * a.ring_radius / max(n - 1, 1)))
+    if a.shape == 'square':
+        print('  工位 A 立牌: %d 个, 正方形边长 %.2f m (正面朝外), 相邻间距 %.2f m'
+              % (n, a.side, 4 * a.side / n))
+    else:
+            print('  工位 A 立牌: %d 个, 半径 %.2f m, 张角 %.0f° (相邻间距 %.2f m, 每个正面朝弧心)'
+                  % (n, a.ring_radius, a.ring_arc, arc * a.ring_radius / max(n - 1, 1)))
     print('  工位 B 红绿灯: %d 个, x=%.2f" 正面朝 +x' % (len(LIGHT_YS), LIGHT_X))
     print('  工位 C 车牌:   %d 辆, x=%.2f, 车牌朝 +x' % (len(CAR_YS), CAR_X))
     print('  相机小车 rig:  %d 台 -> %s' % (len(RIGS),
