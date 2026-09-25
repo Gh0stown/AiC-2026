@@ -128,6 +128,40 @@ def read_light(image_bgr, conf=0.25, model=None, models_dir=None, device='cpu'):
     return T.read_state(image_bgr, conf=conf, model=m, device=device)
 
 
+def read_light_vote(frames, conf=0.25, model=None, models_dir=None, device='cpu'):
+    """多帧投票读灯态 -> (状态, 置信度, 框, 票数)
+
+    ★ 为什么需要: 灯时长见 **competition_arena/config/traffic_lights.yaml**（现为 绿15/黄3/红10）。
+      而"跨两次请求都确认绿灯"要花 ~3s（实测），加上起步就把绿灯吃掉一半 ——
+      确认完起步时灯已经变黄了。
+      节点一次请求本来就抓了 3 帧, 直接在这 3 帧里投票: 一次请求 = 3 帧共识,
+      不用再等第二轮, 确认耗时从 ~3s 降到 0（第一帧结果就是共识结果）。
+
+    ★ 平票时按**通行优先级**取最保守的那个（红 > 黄 > 没看到 > 绿）:
+      交通规则下"存疑就别走" —— 平票就当作不能通行, 交给闸去重新读一次
+      （recheck 只要 0.5s, 代价很小; 而误判成绿闯过去是不可接受的）。
+    """
+    votes, best = {}, {}
+    for f in frames:
+        st, cf, box = read_light(f, conf=conf, model=model,
+                                 models_dir=models_dir, device=device)
+        votes[st] = votes.get(st, 0) + 1
+        if st not in best or cf > best[st][1]:
+            best[st] = (box, cf)
+    if not votes:
+        return ('none', 0.0, None, 0)
+    top = max(votes.values())
+    cands = [k for k, n in votes.items() if n == top]
+    if len(cands) == 1:
+        pick = cands[0]
+    else:
+        # 平票 -> 取最保守的（红最保守, 绿最激进）
+        prio = {'red': 0, 'yellow': 1, 'none': 2, 'green': 3}
+        pick = min(cands, key=lambda k: prio.get(k, 2))
+    box, cf = best[pick]
+    return (pick, cf, box, votes[pick])
+
+
 def read_lights(image_bgr, conf=0.25, model=None, models_dir=None, device='cpu'):
     """所有灯珠（按置信度降序）-> [(状态, 置信度, 框), ...]；一帧通常只有 1 个。"""
     m = model or load('light', models_dir)

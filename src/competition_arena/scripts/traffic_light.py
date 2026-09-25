@@ -28,7 +28,7 @@
 参数
 ----
     ~lights    [{name, x, y, z, yaw, layout}]   layout = vertical | horizontal
-    ~sequence  [{color, duration}, ...]         默认 绿6s -> 黄2s -> 红6s
+    ~sequence  [{color, duration}, ...]         默认 绿15s -> 黄3s -> 红10s (与 config/traffic_lights.yaml 一致)
 """
 from __future__ import annotations
 
@@ -61,10 +61,11 @@ class Node(object):
             cfg = yaml.safe_load(open(cfg_path))
         else:
             rospy.logwarn('没给 ~config, 用内置默认')
+            # 兜底默认 —— 与 config/traffic_lights.yaml 保持一致 (绿15/黄3/红10)
             cfg = {'lights': [{'name': 'tl_top'}, {'name': 'tl_bot'}],
-                   'sequence': [{'color': 'green', 'duration': 6.0},
-                                {'color': 'yellow', 'duration': 2.0},
-                                {'color': 'red', 'duration': 6.0}]}
+                   'sequence': [{'color': 'green', 'duration': 15.0},
+                                {'color': 'yellow', 'duration': 3.0},
+                                {'color': 'red', 'duration': 10.0}]}
         self.lights = [L['name'] for L in cfg['lights']]
         self.seq = [(e['color'], float(e['duration'])) for e in cfg['sequence']]
         self.cycle = sum(d for _, d in self.seq)

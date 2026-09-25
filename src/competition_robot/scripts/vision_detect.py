@@ -377,7 +377,12 @@ class VisionDetect(object):
         for ln in res['lines']:
             log('         ' + ln)
 
-        # 画框 + 存图 + 弹窗
+        # ★ 先把结果发出去, 再画框/存图 —— 发布等的是"识别", 不该等 I/O。
+        #   原来先 annotate + cv2.imwrite(1280x960 JPEG + PIL 画中文) 再 publish,
+        #   那几百毫秒会算进红绿灯闸的确认时间里(绿灯只有 6s, 每一百毫秒都要省)。
+        self.pub.publish(String(data=json.dumps(res, ensure_ascii=False)))
+
+        # 画框 + 存图 + 弹窗 (只影响存档, 不影响任务)
         img = self.annotate(frames[-1], res, point, idx)
         fn = '%04d_%s.jpg' % (self.n_saved + 1, point)
         path = os.path.join(self.img_dir, fn)
@@ -385,11 +390,14 @@ class VisionDetect(object):
             cv2.imwrite(path, img)
             self.n_saved += 1
             res['image'] = os.path.join(os.path.basename(self.run_dir), 'images', fn)
+            with open(os.path.join(self.run_dir, 'results.json'), 'w') as f:
+                json.dump(dict(points=self.results, blocks=self.blocks,
+                               lights=self.lights, plates=self.plates),
+                          f, ensure_ascii=False, indent=1)
             with self.lock:
                 self.shown = img
         except Exception as e:                              # noqa: BLE001
             log('  ⚠ 存图失败: %s' % e)
-        self.pub.publish(String(data=json.dumps(res, ensure_ascii=False)))
 
     # ---------------------------------------------------------------- 识别
     def recognize(self, frames, point, kind):
@@ -437,22 +445,17 @@ class VisionDetect(object):
                 self.blocks.setdefault(blk, [0, 0])
                 self.blocks[blk][0], self.blocks[blk][1] = tt
         if kind in ('all', 'light'):
-            st, cf, box = VI.read_light(frames[-1], conf=0.25,
-                                        models_dir=self.a.models_dir, device=self.a.device)
-            if st == 'none':
-                for f in frames[::-1]:
-                    st, cf, box = VI.read_light(f, conf=0.25,
-                                                models_dir=self.a.models_dir,
-                                                device=self.a.device)
-                    if st != 'none':
-                        break
-            out['light'] = dict(state=st, conf=cf)
+            # ★ 一次请求内做多帧投票 —— 灯只有绿 6s, 不能靠"再请求一轮"来确认
+            st, cf, box, nv = VI.read_light_vote(frames, conf=0.25,
+                                                 models_dir=self.a.models_dir,
+                                                 device=self.a.device)
+            out['light'] = dict(state=st, conf=cf, votes=nv, n_frames=len(frames))
             self.lights[point] = st
             if box:
                 boxes.append(dict(cls='light', box=box, conf=cf,
                                   label=VI.LIGHT_CN.get(st, st)))
-            lines.append('红绿灯: %s（直接检灯珠, conf %.2f）'
-                         % (VI.LIGHT_CN.get(st, st), cf))
+            lines.append('红绿灯: %s（直接检灯珠, conf %.2f, %d/%d 帧同判）'
+                         % (VI.LIGHT_CN.get(st, st), cf, nv, len(frames)))
         if kind in ('all', 'plate'):
             # ★ 多帧投票, 不是取"最自信的那一次" —— 漏字的那次往往更自信（见 vote_plate 注释）
             reads = []

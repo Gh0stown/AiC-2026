@@ -43,6 +43,9 @@ lights:
 
 # 红/绿/黄切换时序 (比赛要求"须体现红绿黄状态切换"; 红灯期间车身不得越过停止线)
 sequence:
-  - {color: green,  duration: 6.0}
-  - {color: yellow, duration: 2.0}
-  - {color: red,    duration: 6.0}
+  # ★ 时长别再设那么短: 原来 绿6/黄2/红6 —— 光"确认绿灯"就要 1.8s(3帧投票+起步),
+  #   绿灯只剩 4s, 很容易确认完起步时已经变黄(实测踩到)。
+  #   现在 绿15/黄3/红10: 确认完还有 13s 过路口, 黄灯 3s 也够正常减速停车。
+  - {color: green,  duration: 15.0}
+  - {color: yellow, duration: 3.0}
+  - {color: red,    duration: 10.0}

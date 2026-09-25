@@ -123,11 +123,16 @@ class Patrol(object):
           * 红灯 / 黄灯 -> 原地停车等待，每隔 light_recheck 秒再看一次
           * 没看到灯   -> 当作"不能通行"同样等待（免得"看不见就默认走"）
           * 绿灯       -> 连续 light_confirm 次都读到绿灯才放行（防单帧误检）
+                          ★ 默认 1: 因为识别节点在**一次请求内**就做了 3 帧投票,
+                            一次读到的绿灯已经是 3 帧共识。原来默认 2 要再等一轮,
+                            实测吃掉 3.0s —— 而绿灯总共只有 6s, 确认完起步就变黄了。
         等超过 light_max_wait 仍未确认绿灯 -> 返回 False（本次运行到此为止），
         除非显式给了 --light-none-go 才放行。
 
-        ★ 为什么要"连续确认": 识别节点一次请求抓 3 帧取最自信的一颗灯珠，
-          已经有一点冗余；再加一层跨请求确认，能挡掉偶发误检。
+        ★ 时间预算(很关键): 灯时长见 competition_arena/config/traffic_lights.yaml（现为 绿15/黄3/红10）。
+          识别节点一次请求抓 3 帧并在**帧内投票**, 所以单次请求的绿灯已经是共识。
+          实测跨两次请求确认花 3.0s, 确认完起步时灯已变黄 —— 所以默认 light_confirm=1,
+          把确认压进一次请求里。要更保守可以 --light-confirm 2（会慢 ~1.5s/次）。
         ★ 为什么这个闸必须在**离开路口前最后**判: 先判灯再去干别的活，等干完
           灯早变了（灯循环 绿6s->黄2s->红6s）。所以路线里红绿灯排在同地点其它站之后。
         """
@@ -139,7 +144,8 @@ class Patrol(object):
             if st == 'green':
                 confirm += 1
                 if confirm >= max(1, self.a.light_confirm):
-                    rospy.loginfo('  [交通灯] 绿灯（连续 %d 次确认）-> 放行' % confirm)
+                    rospy.loginfo('  [交通灯] 绿灯（连续 %d 次确认）-> 放行'
+                                  '（本次在闸内共等 %.1f s）' % (confirm, time.time() - t0))
                     return True
                 rospy.loginfo('  [交通灯] 绿灯（%d/%d 次确认）'
                               % (confirm, self.a.light_confirm))
@@ -496,10 +502,11 @@ def main():
                     help='不做识别联动（不发 /vision/request）')
     ap.add_argument('--no-light-gate', action='store_true',
                     help='关掉红绿灯通行闸（默认开: 红/黄灯停车等待, 连续确认绿灯才走）')
-    ap.add_argument('--light-recheck', type=float, default=1.5,
+    ap.add_argument('--light-recheck', type=float, default=0.5,
                     help='等灯时每隔几秒重新识别一次')
-    ap.add_argument('--light-confirm', type=int, default=2,
-                    help='连续几次读到绿灯才放行（防单帧误检）')
+    ap.add_argument('--light-confirm', type=int, default=1,
+                    help='连续几次读到绿灯才放行; 默认 1 因为节点已在一次请求内做了 3 帧投票。'
+                         '灯只有绿 6s, 调成 2 会多花 ~1.5s, 容易"确认完就变黄"')
     ap.add_argument('--light-max-wait', type=float, default=60.0,
                     help='等灯上限(秒); 超时默认停车并结束本次运行')
     ap.add_argument('--light-none-go', action='store_true',
