@@ -219,6 +219,8 @@ class VisionDetect(object):
                                       float(widths.get(uri, 0.05)))
                     out.setdefault(grp, []).append(
                         dict(cls='non_community' if '_F' in uri else 'community',
+                             x=p['x'], y=p['y'],
+                             h=max(q[2] for q in g['pts']),   # 立牌真实高度(算深度要用)
                              pts=g['pts']))
             return out
         except Exception as e:                              # noqa: BLE001
@@ -251,6 +253,70 @@ class VisionDetect(object):
         sd = np.maximum(depth, 1e-9)
         return (rob['W'] / 2.0 - rob['fx'] * lateral / sd,
                 rob['H'] / 2.0 - rob['fx'] * vert / sd, depth)
+
+    @staticmethod
+    def _box_world(box, pose, rob, standee_h):
+        """用**检出框**反算这个立牌的世界坐标 (x, y)；算不出来返回 None。
+
+        ★ 为什么不用"位姿投影期望框"来做归属:
+          这几个点位是**贴着 0.5 m 拍**的, 位姿差 3 cm 就是 ~70 px 的像素偏移
+          (1cm * fx/d = 1cm * 1154.6 / 0.5m ≈ 23 px), 而且立牌下沿常常被画面底边切掉。
+          实测按像素归属只能匹配上 5~6/10 个真立牌(B_north 直接 0/2), 于是节点
+          "明明画面里有 2 个, 却报 0 个"。
+
+          这里改成用**立牌的已知高度**定深度 —— 深度来自框本身, 不受位姿误差放大:
+              v(z) = H/2 + fx*(camz - z)/d
+              底边(z=0)在画面里就用底边; 被切了就用顶边(z=h)
+          再由 u 反算横向偏移, 得到世界坐标。组成员间距才 0.09 m、组间 >1 m,
+          所以按世界坐标匹配的容差可以给得很宽还很稳。
+        """
+        u0, v0, u1, v1 = box
+        W, H, fx = rob['W'], rob['H'], rob['fx']
+        camz = rob['mount'][2]
+        uc = (u0 + u1) / 2.0
+        d = None
+        if v1 < H - 3:                                  # 底边在画面里 -> 用 z=0
+            dv = v1 - H / 2.0
+            if dv > 2:
+                d = fx * camz / dv
+        if d is None and v0 > 3:                        # 底边被切 -> 用顶边 z=h
+            dv = v0 - H / 2.0
+            if dv > 2 and camz > standee_h:
+                d = fx * (camz - standee_h) / dv
+        if d is None or not (0.05 < d < 8.0):
+            return None
+        lat = (W / 2.0 - uc) * d / fx
+        cx, cy = G.camera_xy(pose[0], pose[1], pose[2], rob)
+        fwd = (math.cos(pose[2]), math.sin(pose[2]))
+        left = (-math.sin(pose[2]), math.cos(pose[2]))
+        return (cx + d * fwd[0] + lat * left[0], cy + d * fwd[1] + lat * left[1], d)
+
+    def attribute_world(self, ds, point, pose):
+        """按世界坐标把检出分给该点位的立牌 -> (保留下来的检出, 被排除的个数)。
+
+        每块立牌最多认领一个检出(取世界距离最近且 <= attribute_radius 的)。
+        拿不到位姿/没建好几何时返回 (None, 0), 由调用方退回旧办法。
+        """
+        if not pose or point not in self.objs or not self.objs[point]:
+            return None, 0
+        rob = G.load_robot()
+        R = self.a.attribute_radius
+        used, kept = set(), []
+        for o in self.objs[point]:
+            best, bi = 1e9, -1
+            for i, d in enumerate(ds):
+                if i in used or d['cls'] != o['cls']:
+                    continue
+                w = self._box_world(d['box'], pose, rob, o.get('h', 0.15))
+                if w is None:
+                    continue
+                dist = math.hypot(w[0] - o['x'], w[1] - o['y'])
+                if dist < best:
+                    best, bi = dist, i
+            if bi >= 0 and best <= R:
+                kept.append(ds[bi])
+                used.add(bi)
+        return kept, len(ds) - len(kept)
 
     def _expected_boxes(self, point, pose):
         if not pose or point not in self.objs:
@@ -337,7 +403,13 @@ class VisionDetect(object):
             ds = dedup(ds)
             exp = self._expected_boxes(point, pose) if self.a.attribute else None
             kept, extra = ds, 0
-            if exp:
+            if self.a.attribute and self.a.attribute_mode == 'world':
+                got = self.attribute_world(ds, point, pose)
+                if got[0] is not None:
+                    kept, extra = got
+                else:
+                    exp = None                              # 退化的信号, 下面会打 ⚠
+            elif exp:
                 kept = [d for d in ds if hits_any(d['box'], exp)]
                 extra = len(ds) - len(kept)
             tot, c, n = VI.count_standees(kept)
@@ -347,7 +419,8 @@ class VisionDetect(object):
             line = '人偶 %d 个：社区 %d / 非社区 %d' % (tot, c, n)
             if extra:
                 line += '        （画面里另有 %d 个邻居, 已按组归属排除）' % extra
-            if not exp and self.a.attribute:
+            if (not exp and not kept and self.a.attribute
+                    and self.a.attribute_mode != 'world'):
                 line += '        ⚠ 没拿到位姿, 未按组归属'
             lines.append(line)
             # ★ 每个点位只保留**最新一次**结果, 再由点位重算街区合计。
@@ -583,6 +656,10 @@ def main():
     ap.add_argument('--show', dest='show', action='store_true', default=True,
                     help='弹出带识别框的结果图（默认开）')
     ap.add_argument('--no-show', dest='show', action='store_false')
+    ap.add_argument('--attribute-mode', default='world', choices=['world', 'image'],
+                    help='按什么归属: world=用检出框反算世界坐标(默认, 近距下稳得多) / image=旧的像素投影')
+    ap.add_argument('--attribute-radius', type=float, default=0.25,
+                    help='world 归属的匹配半径 m (组成员间距 0.09m, 组间 >1m, 0.25 很安全)')
     ap.add_argument('--attribute', dest='attribute', action='store_true', default=True,
                     help='按点位对应的那一组归属（默认开, 避免把邻居算进来）')
     ap.add_argument('--no-attribute', dest='attribute', action='store_false')
