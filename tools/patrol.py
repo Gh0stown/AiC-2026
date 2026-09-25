@@ -134,7 +134,7 @@ class Patrol(object):
           实测跨两次请求确认花 3.0s, 确认完起步时灯已变黄 —— 所以默认 light_confirm=1,
           把确认压进一次请求里。要更保守可以 --light-confirm 2（会慢 ~1.5s/次）。
         ★ 为什么这个闸必须在**离开路口前最后**判: 先判灯再去干别的活，等干完
-          灯早变了（灯循环 绿6s->黄2s->红6s）。所以路线里红绿灯排在同地点其它站之后。
+          灯早变了（灯时长见 competition_arena/config/traffic_lights.yaml）。所以路线里红绿灯排在同地点其它站之后。
         """
         if self.a.no_light_gate:
             return True
@@ -506,7 +506,7 @@ def main():
                     help='等灯时每隔几秒重新识别一次')
     ap.add_argument('--light-confirm', type=int, default=1,
                     help='连续几次读到绿灯才放行; 默认 1 因为节点已在一次请求内做了 3 帧投票。'
-                         '灯只有绿 6s, 调成 2 会多花 ~1.5s, 容易"确认完就变黄"')
+                         '灯绿相只有十几秒, 调成 2 会多花 ~1.5s, 容易"确认完就变黄"')
     ap.add_argument('--light-max-wait', type=float, default=60.0,
                     help='等灯上限(秒); 超时默认停车并结束本次运行')
     ap.add_argument('--light-none-go', action='store_true',

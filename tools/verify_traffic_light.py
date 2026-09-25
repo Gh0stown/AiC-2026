@@ -133,7 +133,7 @@ def main():
         got = [c for c in ('green', 'yellow', 'red') if c in set(seen)]
         print('自动循环检查: 22 秒内观察到 %s' % (', '.join(got) if got else '(什么都没收到)'))
         if len(got) >= 2:
-            print('  ✓ 循环节点在工作 (时序 绿6s->黄2s->红6s, 22s 至少能看到 2 种)')
+            print('  ✓ 循环节点在工作 (时序见 config/traffic_lights.yaml: 绿15s->黄3s->红10s)')
         else:
             print('  ✗ 只看到 %d 种状态 —— 检查 traffic_light 节点是否在跑' % len(got))
             cycle_bad = 1

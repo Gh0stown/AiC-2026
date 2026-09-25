@@ -445,7 +445,7 @@ class VisionDetect(object):
                 self.blocks.setdefault(blk, [0, 0])
                 self.blocks[blk][0], self.blocks[blk][1] = tt
         if kind in ('all', 'light'):
-            # ★ 一次请求内做多帧投票 —— 灯只有绿 6s, 不能靠"再请求一轮"来确认
+            # ★ 一次请求内做多帧投票 —— 绿灯相只有十几秒, 不能靠"再请求一轮"来确认
             st, cf, box, nv = VI.read_light_vote(frames, conf=0.25,
                                                  models_dir=self.a.models_dir,
                                                  device=self.a.device)

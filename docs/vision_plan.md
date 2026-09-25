@@ -299,7 +299,7 @@ datasets/vision/
 | 3 | `plate` | 车牌（3 个） | 车牌识别 |
 
 - **灯态不是框**：它是整张图的标签，记在 `meta.jsonl` 的 `light` 字段
-  （采集时订阅 `/traffic_light/state`，循环 绿6s→黄2s→红6s，采久了三种都有）；
+  （采集时订阅 `/traffic_light/state`，循环见 `config/traffic_lights.yaml`，采久了三种都有）；
 - **车牌字符串**记在 `meta.jsonl` 的 `objects[].plate`，给 HyperLPR3 用；
 - **灯珠像素位置**也存了（`lamps`），做"箱内三颗按 15.6%/50%/84.4% 采样判色"时可直接校验。
 
