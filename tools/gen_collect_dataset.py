@@ -133,6 +133,27 @@ def visible_names(objs, x, y, yaw, rob):
     return names
 
 
+_SIDE_N = [(0.0, 1.0), (1.0, 0.0), (0.0, -1.0), (-1.0, 0.0)]
+
+
+def side_of(o, L):
+    """这个立牌在正方形的哪条边上 (看它离哪条边最近)"""
+    d = [abs(o['y'] - L / 2), abs(o['x'] - L / 2), abs(o['y'] + L / 2), abs(o['x'] + L / 2)]
+    return min(range(4), key=lambda i: d[i])
+
+
+def face_dot(o, x, y):
+    """相机相对这块立牌正面的朝向: +1 正对正面, -1 正对背面。
+    (立牌正面 = 模型局部 -x, 所以正面法向 = -(cos yaw, sin yaw))
+    """
+    fx, fy = -math.cos(o['yaw']), -math.sin(o['yaw'])
+    vx, vy = x - o['x'], y - o['y']
+    nv = math.hypot(vx, vy)
+    if nv < 1e-6:
+        return 0.0
+    return (vx * fx + vy * fy) / nv
+
+
 def maybe_visible(o, x, y, yaw, rob, frac=0.25, min_w=10.0):
     """宽松版可见性: 只要有 1/4 角点在画面里、投影宽 >=10px 就算"拍到了"。
 
@@ -256,6 +277,55 @@ def plan(layout, args, rng):
                           dist=got[3], light=None,
                           z=args.rob['mount'][2]
                             + rng.choice([-0.10, 0.0, 0.0, 0.0, 0.10])))
+
+    # ---- A3 正方形场地: 立牌摆成正方形(朝外), 相机在**外圈**拍 ----
+    #   ★ 照比赛场地的真实画面来: A_north 点位上, 画面里既有本组的**正面**,
+    #     也有别的组的**背面**(大白板, 近且大)。原来只采弧形圈里正对拍, 模型没见过
+    #     这种"正反面同框"。
+    #   硬判据: 每张图必须**同时**出现 >=1 个正面(c>0.35) 和 >=1 个背面(c<-0.35)。
+    if args.square:
+        L = args.square_side
+        lo, hi = [float(v) for v in args.square_dist.split(':')]
+        for _ in range(args.square):
+            side = rng.randrange(4)
+            near = [o for o in standees if side_of(o, L) == side]
+            if not near:
+                continue
+            o = rng.choice(near)
+            nx, ny = _SIDE_N[side]
+            tx, ty = -ny, nx                                # 沿边方向
+            got = None
+            for _try in range(200):
+                # 站在这一侧外面: 垂直离边 dperp, 沿边再挪 along
+                dperp = rng.uniform(lo, hi)
+                along = rng.uniform(-L * 0.55, L * 0.55)
+                x = o['x'] + nx * dperp + tx * along
+                y = o['y'] + ny * dperp + ty * along
+                # 瞄准本侧某块立牌(可以是旁边那块)或正方形中心, 再抖一点
+                tgt = rng.choice(near) if rng.random() < 0.7 else dict(x=0.0, y=0.0)
+                yaw = wrap(math.atan2(tgt['y'] - y, tgt['x'] - x)
+                           + math.radians(rng.uniform(-14, 14)))
+                if not maybe_visible(o, x, y, yaw, args.rob):
+                    continue
+                # ★ 必须"正反面同框"
+                nf = nb = 0
+                for q in standees:
+                    if not maybe_visible(q, x, y, yaw, args.rob, frac=0.3, min_w=12.0):
+                        continue
+                    c = face_dot(q, x, y)
+                    nf += (c > 0.35)
+                    nb += (c < -0.35)
+                if nf >= 1 and nb >= 1:
+                    got = (x, y, yaw, math.hypot(x - o['x'], y - o['y']), nf, nb)
+                    break
+            if got is None:
+                continue
+            plans.append(dict(phase='square', recipe='sq%d_%s' % (side, 'front' if got[4] else 'x'),
+                              bucket=args.div_bucket, target=o['name'],
+                              x=got[0], y=got[1], yaw=got[2], dist=got[3],
+                              light=None, n_front=got[4], n_back=got[5],
+                              z=args.rob['mount'][2]
+                                + rng.choice([-0.10, 0.0, 0.0, 0.0, 0.10])))
 
     # ---- B 红绿灯 (距离 x 方位角 x 三种状态; 灯箱必须完整在画面里) ----
     #   ★ issue #12: 方位角维度是必须的 —— 只采正对时, 竞技场里斜看的灯全漏。
@@ -432,6 +502,7 @@ def capture(args, plans, objs, out_dir):
             target=p['target'], dist=round(p['dist'], 3),
             angle=p.get('angle'),
             recipe=p.get('recipe'), bucket=p.get('bucket'),
+            n_front=p.get('n_front'), n_back=p.get('n_back'),
             cam_z=round(float(p.get('z', 0.0)), 4),
             pose=[round(p['x'], 4), round(p['y'], 4), round(p['yaw'], 4)],
             pose_truth=[round(lx, 4), round(ly, 4), round(lyaw, 4)],
@@ -483,6 +554,10 @@ def main():
                     help='用第几台采集相机小车 (1/2/3); 0=用完整机器人 competition_robot')
     ap.add_argument('--only-phase', default='',
                     help='只拍某个工位: ring / light / plate (三台车并行时各管一个)')
+    ap.add_argument('--square', type=int, default=0,
+                    help='正方形场地采集张数(立牌摆成正方形朝外, 相机在外圈拍, 每张必须正反面同框)')
+    ap.add_argument('--square-side', type=float, default=1.0, help='正方形边长 m')
+    ap.add_argument('--square-dist', default='0.35:0.85', help='离边的垂直距离范围 lo:hi')
     ap.add_argument('--ring-div', type=int, default=0,
                     help='立牌"多样拍摄"张数 (front/oblique/along/behind 四种配方 + 高度偏移)')
     ap.add_argument('--div-bucket', default='div',

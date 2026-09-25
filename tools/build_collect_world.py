@@ -112,6 +112,10 @@ RIG_SDF = """<?xml version="1.0"?>
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument('--shape', default='arc', choices=['arc', 'square'],
+                    help='立牌怎么摆: arc=弧形圈(原来) / square=正方形(照比赛场地: 朝外, 相机外圈拍)')
+    ap.add_argument('--side', type=float, default=1.0,
+                    help='--shape square 时的边长 (比赛场地 A 区实测 0.90 x 1.40 m)')
     ap.add_argument('--ring-radius', type=float, default=RING_R)
     ap.add_argument('--ring-arc', type=float, default=360.0,
                     help='立牌铺成多大的一段弧 (度)。360=整圈(原行为); '
@@ -216,21 +220,51 @@ def main():
 
     # ---- 工位 A: 立牌圈 (正面朝圈心: 立牌正面 = 模型局部 -x, 所以 yaw = 方位角) ----
     parts += ['', '    <!-- ================= A 立牌圈 (正面全部朝圈心) ================= -->']
-    arc = math.radians(max(1.0, min(360.0, a.ring_arc)))
-    for k, m in enumerate(models):
-        if arc >= 2 * math.pi - 1e-9:
-            th = 2 * math.pi * k / n                       # 整圈
-        else:
-            # 一段弧: 均分在 -arc/2 ~ +arc/2, 每个仍朝弧心 (yaw = 方位角)
-            th = -arc / 2 + arc * k / max(n - 1, 1)
-        x, y = a.ring_radius * math.cos(th), a.ring_radius * math.sin(th)
-        parts.append('    <include><uri>model://%s</uri>'
-                     '<name>ring_%02d</name>'
-                     '<pose>%.4f %.4f 0 0 0 %.6f</pose></include>'
-                     % (m, k + 1, x, y, th))
-        objects.append(dict(cls='non_community' if '_F' in m else 'standee',
-                            name='ring_%02d' % (k + 1), model=m,
-                            x=x, y=y, yaw=th, ring=True))
+    if a.shape == 'square':
+        arc = 0.0      # 只是为了让下面那句摘要打印不炸(方形分支用不到弧长)
+        # ★ 正方形摆放(照比赛场地): 立牌均分在边长 L 的正方形四周, **正面朝外**,
+        #   相机在正方形外圈拍 —— 这样一帧里会同时出现"本侧正面 + 对面背面",
+        #   正是比赛场地 A_north 那种画面(实测: 正面 + 好几块大白板背面)。
+        L = max(0.3, a.side)
+        SIDE_N = [(0.0, 1.0), (1.0, 0.0), (0.0, -1.0), (-1.0, 0.0)]
+        for k, m in enumerate(models):
+            t = (k + 0.5) / n * 4.0                        # 沿周长走一圈
+            si, u = int(t) % 4, t - int(t)
+            if si == 0:
+                x, y = -L / 2 + u * L, L / 2
+            elif si == 1:
+                x, y = L / 2, L / 2 - u * L
+            elif si == 2:
+                x, y = L / 2 - u * L, -L / 2
+            else:
+                x, y = -L / 2, -L / 2 + u * L
+            nx, ny = SIDE_N[si]
+            # 立牌正面 = 模型局部 -x => yaw 取"法向的反方向"才能让正面朝外
+            yaw = math.atan2(-ny, -nx)
+            parts.append('    <include><uri>model://%s</uri>'
+                         '<name>ring_%02d</name>'
+                         '<pose>%.4f %.4f 0 0 0 %.6f</pose></include>'
+                         % (m, k + 1, x, y, yaw))
+            objects.append(dict(cls='non_community' if '_F' in m else 'standee',
+                                name='ring_%02d' % (k + 1), model=m,
+                                x=x, y=y, yaw=yaw, ring=True, side=si))
+        print('立牌摆成正方形: 边长 %.2f m, %d 个, 正面朝外' % (L, n))
+    else:
+        arc = math.radians(max(1.0, min(360.0, a.ring_arc)))
+        for k, m in enumerate(models):
+            if arc >= 2 * math.pi - 1e-9:
+                th = 2 * math.pi * k / n                       # 整圈
+            else:
+                # 一段弧: 均分在 -arc/2 ~ +arc/2, 每个仍朝弧心 (yaw = 方位角)
+                th = -arc / 2 + arc * k / max(n - 1, 1)
+            x, y = a.ring_radius * math.cos(th), a.ring_radius * math.sin(th)
+            parts.append('    <include><uri>model://%s</uri>'
+                         '<name>ring_%02d</name>'
+                         '<pose>%.4f %.4f 0 0 0 %.6f</pose></include>'
+                         % (m, k + 1, x, y, th))
+            objects.append(dict(cls='non_community' if '_F' in m else 'standee',
+                                name='ring_%02d' % (k + 1), model=m,
+                                x=x, y=y, yaw=th, ring=True))
 
     # ---- 工位 B: 红绿灯 ----
     parts += ['', '    <!-- ================= B 红绿灯 (正面朝 +x) ==================== -->']
