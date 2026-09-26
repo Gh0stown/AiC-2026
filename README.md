@@ -1,527 +1,288 @@
-# 4.2 m × 4.2 m 比赛场地 · Gazebo 仿真
+# AiC-2026 —— 人工智能算法大赛 复赛机器人（ROS Noetic + Gazebo 11）
 
-由一张俯视平面图自动生成的 ROS Noetic + Gazebo 11 比赛场地仿真。
-地面贴图就是原始地图图片本身，墙体是从图中白色线条**挤出**的三维几何。
+4.2 m × 4.2 m 比赛场地的**完整仿真与比赛流程实现**：
+四轮麦克纳姆全向底盘 → 建图 / AMCL 定位 / move_base 导航 → 17 站固定路线巡检（含 10 个视觉识别点）
+→ 三个视觉识别任务（人偶立牌 / 车牌 / 红绿灯）→ 倒车入库。
 
 ![场地预览](src/competition_arena/docs/arena_preview.png)
 
+> **第一次跑 / 换机器**：先看 [`docs/wsl_setup.md`](docs/wsl_setup.md)（依赖、clone 后怎么编、WSL 注意事项）。
+> **验收**：看 [`验收指南.md`](验收指南.md)（三条命令启动，或 `./tools/acceptance.sh` 一键 6 项检查）。
+> **交接 / 现状**：看 [`交接文档.md`](交接文档.md)。
+> **一步一坑的排查记录**：看 [`docs/issue_log.md`](docs/issue_log.md)（16 条，含每条的现象 / 根因 / 修法 / 实测）。
+
 ---
 
-> **换机器跑 / 第一次跑，先看 [`docs/wsl_setup.md`](docs/wsl_setup.md)**
-> （依赖清单、clone 后怎么编、哪些东西没入库、WSL 注意事项）。
-> **场景已搭建完成，要看交接请看 [`交接文档.md`](交接文档.md)**（现状 / 还差什么 / 场地外扩注意事项 / 踩过的坑）。
-> 要验收看 [`验收指南.md`](验收指南.md)：三条命令启动，或
-> `./tools/acceptance.sh` 一键跑 6 项自动检查。
+## 一、实现了什么（都有实测数字）
 
-## 1. 场地是怎么从图片里提取出来的
-
-原始图片 `1280×1280`，纯黑（可通行）/ 纯白（墙）二值图。
-
-| 项目 | 数值 |
-|---|---|
-| 场地外框在图中范围 | x `[29, 1252)`、y `[31, 1254)` = **1223 × 1223 px** |
-| 比例尺 | **3.434 mm / px** |
-| 场地尺寸 | **4.200 × 4.200 m**（**外沿**到外沿） |
-| 墙体厚度 | 中位 **24 mm**（6~7 px），其中一处加厚墙为 **45 mm** |
-| 提取出的墙体 | **32 段**轴对齐矩形，总长 41.4 m |
-| 条纹区域 | 2 处，各 6 条 |
-| 矢量化还原精度 | 与原图掩膜 **IoU = 0.968**（残差全部来自 JPEG 抗锯齿边缘） |
-
-坐标系：**场地中心为原点**，`+x` 向右、`+y` 向上（俯视），`z = 0` 为地面。
-即俯视时图片的"上"对应 `+y`、"右"对应 `+x`——和 RViz 的 `TopDownOrtho` 视图一致。
-
-> 图片最外圈那 2 px 白线是**图片边框**（贴着图像边缘、等比缩放的图框），不是墙，已忽略。
-
-### 一个被踩过的坑（已修复并验证）
-
-Gazebo 对 box 顶面的 UV 映射是：贴图 `+u` → 世界 `-y`，贴图 `+v` → 世界 `-x`；
-而墙体是按"图片 `+x` → 世界 `+x`"布置的。两者天然差 90°。
-所以生成脚本会把地面贴图**逆时针预旋转 90°** 后再写出。
-
-这一点不是靠推理，而是靠**离屏渲染实测**校准的：分别只渲染地面、只渲染墙体，
-再各自与原图做 8 种朝向的匹配。修正前后：
-
-| | 修正前 | 修正后 |
+| 模块 | 内容 | 实测 |
 |---|---|---|
-| 地面贴图最佳朝向 | `identity`（F1 = 1.000） | `rot270`（F1 = **1.000**） |
-| 墙体几何最佳朝向 | `rot270`（F1 = 0.932） | `rot270`（F1 = **0.932**） |
-
-两者现在一致，说明**贴图线条与三维墙体完全重合**（预览图里灰色墙体正好压在白线上）。
-
----
-
-## 2. 目录结构
-
-```
-人工智能算法大赛/
-├── README.md                        ← 本文件
-├── src/
-│   ├── competition_arena/           ← 场地功能包
-│   │   ├── package.xml  CMakeLists.txt
-│   │   ├── worlds/competition_arena.world      ← 【核心】Gazebo 世界（地面+墙体）
-│   │   ├── media/materials/
-│   │   │   ├── textures/arena_floor.png        ← 地面贴图（已预旋转 90°）
-│   │   │   │            arena_floor_unrotated_reference.png  ← 未旋转版，仅供人眼对照
-│   │   │   └── scripts/arena.material          ← OGRE 材质脚本
-│   │   ├── maps/arena_map.pgm / .yaml          ← ROS 栅格地图（导航用，黑=障碍）
-│   │   ├── launch/arena_only.launch            ← 只启动场地（看地图用）
-│   │   ├── rviz/arena.rviz
-│   │   ├── scripts/build_arena.py              ← 【核心】从图片重新生成整个场地
-│   │   ├── tools/map_source.jpg                ← 输入图片
-│   │   ├── tools/arena_geometry.json           ← 提取出的几何数据
-│   │   └── docs/arena_preview.png              ← 预览图
-│   └── competition_robot/           ← 机器人功能包 (四轮麦克纳姆)
-│       ├── config/robot_params.yaml        ★ 唯一真值源
-│       ├── scripts/mecanum.py              正/逆运动学 (仿真+真机共用)
-│       ├── scripts/mecanum_odometry.py     轮式里程计  (仿真+真机共用)
-│       ├── scripts/sim_wheel_encoders.py   理想编码器  (仅仿真)
-│       ├── scripts/gen_robot.py            YAML -> URDF
-│       ├── urdf/competition_robot.urdf     生成物
-│       ├── launch/robot_gazebo.launch
-│       └── docs/参数测量清单.md            ★ 拿实车量尺寸看这个
-├── tools/                           ← 开发/校验脚手架（非运行必需）
-│   ├── verify_alignment.sh          ← 一键校验"贴图 vs 墙体"是否对齐
-│   ├── render_topdown.sh            ← 离屏俯视渲染
-│   ├── capture_topdown.py
-│   └── test_launch.sh               ← 无头端到端自检
-├── build/  devel/                   ← catkin 编译产物（已编译好）
-```
+| **场地** | 4.2 m 见方；围墙退到白线外 0.10 m、墙高 0.30 m；红绿灯 / 3 辆车 / 人偶立牌按官方尺寸建模 | 地面贴图与三维墙体逐像素对齐（F1 1.000 / 0.932） |
+| **机器人** | 四轮麦克纳姆；几何 / 运动学 / 话题名 / frame 名全部来自 `config/robot_params.yaml`（仿真与真机**共用一份**） | 自研全向驱动插件自转保真度 **0.994**（Gazebo 自带插件只有 0.72） |
+| **建图** | 默认 2D 雷达（实车同款镭神 N10_P）；gmapping / karto 都能跑并自动打分 | 用几何生成的地图比 SLAM 图可走面积多 0.4 m²、边界更准 |
+| **定位** | AMCL（omni 模型，支持麦轮横移） | 定位误差中位 **5.1 cm** |
+| **导航** | DWA（默认）/ TEB / TrajectoryPlanner 三套已装并横向对比 | 连续 6 个目标点 **6/6 到达、0 次恢复行为**；直线横向偏差 5 mm |
+| **巡检** | 17 站固定路线（10 个识别点，点位与拍照朝向**由几何算出**，不手填） | **17/17 到点、0 失败**；AMCL 到点误差 0.056 m；一圈 166 s |
+| **倒车入库** | 激光对墙的位姿伺服倒车（不靠定时 / 定距） | 见 [`验收指南.md`](验收指南.md) 基线值 |
+| **视觉·人偶立牌** | `weights/standee_yolo11n.pt`，2 类 `comm` / `non_comm` | 密集正方形数据：精确 **92.5%**、召回 **98.7%**；真实场地 5 个点位计数 **10/10** |
+| **视觉·车牌** | `weights/plate_yolo11n.pt` + HyperLPR3 识别网络 | 自采 105 张端到端 OCR **105/105**；独立场地数据 **87%** |
+| **视觉·红绿灯** | `weights/traffic_light_yolo11n.pt`，3 类，**直接检"亮着的那颗灯珠"**（不检灯箱） | 自采 90 张 **90/90**；红 / 黄灯原地停车等待，确认绿灯才走 |
+| **验收** | `tools/acceptance.sh` 一键 6 项自动检查 | 全绿 |
 
 ---
 
-## 3. 编译与运行
+## 二、快速开始
 
 ```bash
-cd ~/桌面/人工智能算法大赛
+cd AiC-2026
 source /opt/ros/noetic/setup.bash
-catkin_make                       # 已编译过，改过文件才需要重跑
-source devel/setup.bash
+catkin_make                        # 首次 / 改过 CMakeLists 或新增脚本时
+source devel/setup.bash            # 每个新终端都要 source（或直接用 tools/nav.sh）
 
-# 一键启动：场地 + 机器人 + RViz  (机器人见第 9 节)
-roslaunch competition_robot robot_gazebo.launch
-
-# 只看场地（不启动机器人）
-roslaunch competition_arena arena_only.launch
+# ① 世界 + 定位 + 导航
+roslaunch competition_robot navigation_wsl.launch      # WSL 用这个；纯 Linux 可用 navigation.launch
+# ② 识别节点（会弹出带识别框的结果图；无界面加 --no-show）
+rosrun competition_robot vision_detect.py
+# ③ 巡检路线（到识别点位自动请求识别）
+rosrun competition_robot patrol.py \
+    --file $(rospack find competition_robot)/config/recognition_route.yaml
 ```
 
-常用参数：
+只想看场地 / 开键盘开车：
 
 ```bash
-roslaunch competition_arena arena.launch gui:=false          # 无 Gazebo 界面
-roslaunch competition_arena arena.launch rviz:=false         # 无 RViz
-roslaunch competition_arena arena.launch x:=-0.48 y:=-1.77 yaw:=0.0   # 自定义初始位姿
+roslaunch competition_arena arena_only.launch          # 只起场地
+roslaunch competition_robot robot_gazebo.launch        # 场地 + 机器人（+ RViz）
+rosrun teleop_twist_keyboard teleop_twist_keyboard.py  # 键盘遥控（需 apt install）
 ```
 
-机器人默认出生在**场地南侧走廊**中心 `(-0.483, -1.774)`，朝 `+x`。
+> **`RLException: ... is neither a launch file in package`？** 那是因为 `devel/setup.bash` 没 source。
+> 用包装脚本可以一劳永逸：`tools/nav.sh`（自动 source + 清残留进程 + 避开 `.venv`），
+> 支持 `tools/nav.sh planner:=teb` / `sim:=false` / `--build`。
 
-### 键盘控制
+---
 
-```bash
-rosrun teleop_twist_keyboard teleop_twist_keyboard.py    # 需 apt install ros-noetic-teleop-twist-keyboard
-# 或者手动发速度
-rostopic pub -r 10 /cmd_vel geometry_msgs/Twist "{linear: {x: 0.3}, angular: {z: 0.0}}"
+## 三、目录结构
+
+```
+AiC-2026/                                ← catkin 工作区根
+├── README.md                            ← 本文件（项目介绍）
+├── 验收指南.md                           ← 怎么启动、怎么判定通过
+├── 交接文档.md / PROGRESS.md / 复赛要求与差距分析.md   ← 现状 / 进度 / 需求对照
+├── src/
+│   ├── competition_arena/               ← 场地功能包
+│   │   ├── worlds/competition_arena.world   ★ 比赛场地（地面 + 墙体）
+│   │   ├── worlds/collect.world             ★ 采集专用世界（只放相机小车 + 要识别的道具）
+│   │   ├── config/                          ★ 真值源：立牌 / 车牌 / 红绿灯尺寸与位姿
+│   │   ├── models/                          ← 立牌 / 车 / 红绿灯 / 相机小车模型
+│   │   ├── scripts/build_arena.py           ← 从官方平面图重新生成整个场地
+│   │   ├── scripts/traffic_light.py         ← 红绿灯切换节点（读 config/traffic_lights.yaml）
+│   │   └── docs/                            ← 场地预览 / 坐标网格 / 红绿灯模型说明
+│   └── competition_robot/               ← 机器人功能包（四轮麦克纳姆）
+│       ├── config/robot_params.yaml         ★ 唯一真值源（仿真 + 真机）
+│       ├── config/recognition_points.yaml   识别点位（由 gen_recognition_points.py 生成）
+│       ├── config/recognition_route.yaml    最终巡检路线（17 站）
+│       ├── config/nav/                      AMCL / move_base / DWA / TEB 参数
+│       ├── scripts/                         机器人脚本 + vision_detect.py（识别节点）+ patrol.py（rosrun 入口）
+│       ├── src/holonomic_drive_plugin.cpp   自研全向驱动插件
+│       └── docs/参数测量清单.md              ★ 拿实车量尺寸看这个
+├── tools/                               ← 比赛流程与校验工具（见第七、八节）
+├── weights/                             ← 三个识别模型（已入库，clone 即用）
+├── maps/arena_clean.pgm/.yaml           ← 导航用的干净地图（几何生成）
+├── docs/                                ← 技术文档（视觉环境 / 视觉方案 / 采集世界 / 识别点位 / issue 记录）
+└── build/  devel/                       ← catkin 编译产物（不入库）
 ```
 
 ---
 
-## 4. 话题 / TF
+## 四、话题与 TF
 
 | 话题 | 类型 | 频率 | 说明 |
 |---|---|---|---|
-| `/cmd_vel` | `geometry_msgs/Twist` | — | 速度指令 |
-| `/odom` | `nav_msgs/Odometry` | 50 Hz | 轮式里程计（`encoder` 模式，会漂移） |
-| `/scan` | `sensor_msgs/LaserScan` | 15 Hz | 360° 2D 激光，0.10–8.0 m，720 点 |
-| `/camera/rgb/image_raw` | `sensor_msgs/Image` | 15 Hz | 1280×960 RGB（2026-09-21 从 640×480 提到 1280×960，为车牌 OCR） |
+| `/cmd_vel` | `geometry_msgs/Twist` | — | **全向**：`linear.x/y` 前后与横移、`angular.z` 自转 |
+| `/odom` | `nav_msgs/Odometry` | 50 Hz | 轮式里程计（仿真 / 真机同源） |
+| `/odom_groundtruth` | `nav_msgs/Odometry` | 50 Hz | Gazebo 真值，**仅仿真**，用来量定位误差 |
+| `/scan` | `sensor_msgs/LaserScan` | 15 Hz | 360° 2D 激光，720 点，0.10–8.0 m |
+| `/camera/rgb/image_raw` | `sensor_msgs/Image` | 15 Hz | 1280×960 RGB（为车牌 OCR 提的分辨率） |
 | `/imu` | `sensor_msgs/Imu` | 100 Hz | |
-| `/joint_states` | `sensor_msgs/JointState` | 30 Hz | 左右轮 |
+| `/points` | `sensor_msgs/PointCloud2` | — | 3D 雷达点云，**默认关**（建图 / 导航不用它） |
+| `/vision/request` | `std_msgs/String` | — | JSON 请求一次识别（巡检节点发） |
+| `/vision/result` | `std_msgs/String` | — | 本次识别结果 JSON（识别节点发） |
 
-TF 树：`odom → base_footprint → base_link → {left/right_wheel_link, front/rear_caster_link, laser_link, camera_link, imu_link}`
+TF 树：`map → odom → base_footprint → base_link → {4×wheel, front/rear_caster, laser_link, camera_link, imu_link}`
 
 机器人参数：车体 0.26×0.22×0.09 m、驱动轮 r=45 mm、轮距 0.24 m、底盘离地 20 mm、总重约 2.2 kg。
-（底盘离地间隙是必须的——车体底面贴地会拖地导致差速底盘根本走不动。）
 
 ---
 
-## 5. 换地图 / 改参数
+## 五、机器人（四轮麦克纳姆）
 
-所有产物都由 `scripts/build_arena.py` 一张图生成，改完重跑即可：
-
-```bash
-python3 src/competition_arena/scripts/build_arena.py --help
-
-# 常用
-python3 src/competition_arena/scripts/build_arena.py \
-    --arena 4.2 \            # 场地外沿尺寸 (m)
-    --wall-height 0.5 \      # 墙高 (m)，默认 0.5
-    --stripes flat \         # 条纹：flat=只做贴图；raised=做成低矮凸起
-    --map-resolution 0.01    # ROS 栅格地图分辨率 (m/cell)
-```
-
-换新地图：把新图片覆盖 `src/competition_arena/tools/map_source.jpg`，
-必要时改脚本顶部的 `ARENA_PX`（场地外框在图片中的像素范围），然后重跑。
-脚本会自动重新算出比例尺、墙体、贴图与栅格地图。
-
-重新校验贴图是否与墙体对齐：
-
-```bash
-bash tools/verify_alignment.sh
-# 期望输出:  >>> ALIGNED   (floor: rot270 @ 1.000, walls: rot270 @ 0.932)
-```
-
-它会分别"只渲染地面"和"只渲染墙体"，各自与原图做 8 种朝向匹配；
-两边选中的朝向一致，就说明贴图和墙体严格重合。
-
----
-
-## 6. 关于图中的两处条纹区域
-
-图中有两处"6 条平行线"的区域（顶部中间一处横条、中部一处竖条），
-尺寸都是 **0.21 × 0.57 m**，恰好互成 90°。
-在建筑制图里这种平行线通常表示**台阶 / 坡道 / 减速带**一类的构造。
-
-目前**默认按"地面图案"处理**——只在贴图上显示，不生成三维几何，机器人可以直接压过去。
-如果实际比赛里它们是必须翻越的障碍，一行命令改成凸起：
-
-```bash
-python3 src/competition_arena/scripts/build_arena.py --stripes raised --stripe-height 0.03
-```
-
----
-
-## 7. 需要你确认的几点
-
-1. **4.2 m 是外沿还是内净空？** 现在按"外沿到外沿 = 4.2 m"处理（内净空 ≈ 4.152 m）。
-   若官方口径是内净空 4.2 m，用 `--arena 4.248` 重新生成即可。
-2. ~~**墙高 0.5 m** 是猜的~~ → **已定：0.30 m，且围墙退到白线外 0.10 m**（2026-09-21）。
-   原因：官方红绿灯是横排 64 cm 宽、两脚间距 59 cm 的落地灯，白线内"车道边缘 →
-   白线"只剩 13.6 cm，双支架摆不进去。所以按"**白线内仍是 4.2×4.2 可行驶，围墙退到
-   图片外圈**"处理（`build_arena.py --margin 0.10`，地板 4.4×4.4，围墙内沿 ±2.176）。
-   墙高 0.30 m：灯箱在 0.34~0.48 m，墙若 0.5 m 会挡住最外侧那颗透镜。
-   地图已同步重出（否则 AMCL 会有 10 cm 系统性偏差）。
-   见 [`src/competition_arena/docs/traffic_light_model.md`](src/competition_arena/docs/traffic_light_model.md)。
-
-3. **条纹区域**的含义（见第 6 节）。
-4. **机器人平台**：本机没有装 TurtleBot3，所以配了一个通用差速底盘做测试。
-   如果比赛指定平台（TurtleBot3 / 自制车），把尺寸告诉我，我按真车参数改 `urdf/`。
-
----
-
-## 8. 已验证项
-
-在无头模式下实测通过：
-
-- `catkin_make` 编译通过
-- 场地 + 机器人正常加载，`gzserver` 无报错
-- 地面贴图与三维墙体逐像素对齐（F1 = 1.000 / 0.932）
-- `/scan` 14.9 Hz、`/odom` 50 Hz、`/imu` 100 Hz、相机出图
-- 发 `/cmd_vel` 后机器人实际前进 1.26 m，里程计与 TF 正常
-- ROS 栅格地图 436×436 @ 0.01 m/cell，黑=障碍白=可通行，方向与场地一致
-
-> 注：本机沙箱里 `$HOME` 只读、且无 GPU，测试时用了
-> `HOME=<工作区>/.sim_home` 和 `LIBGL_ALWAYS_SOFTWARE=1`。
-> 你自己机器上正常跑**不需要**设这两个变量。
-
----
-
-## 9. 机器人：四轮麦克纳姆（sim2ros）
-
-### 参数只有一份
-
-```
-        config/robot_params.yaml   ← 唯一真值源
-                 │
-     ┌───────────┴───────────┐
-     ▼                       ▼
-gen_robot.py            真机驱动节点
-     │                  (读同一份 YAML)
-     ▼                       │
-competition_robot.urdf       │
-     │                       │
-     ▼                       ▼
-Gazebo 仿真 ── /cmd_vel ──→ 真实小车
-            ←── /odom ─────
-```
-
-几何、运动学、topic 名、frame 名全部来自同一份参数，
-所以仿真里调好的定位/导航参数搬到真车不用改。
-
-### 运行
-
-```bash
-roslaunch competition_robot robot_gazebo.launch
-```
-
-### 话题
-
-| 话题 | 说明 |
-|---|---|
-| `/cmd_vel` | **全向**：`linear.x` 前后、`linear.y` 横移、`angular.z` 自转 |
-| `/odom` | 轮式里程计，仿真/真机同源（`mecanum_odometry.py`） |
-| `/odom_groundtruth` | Gazebo 真值，**仅仿真**，用来对比定位误差 |
-| `/joint_states` | 四个轮子转角（仿真里是理想编码器） |
-| `/points` | 16 线 3D 激光雷达点云（**默认关**，见下面"建图默认用 2D 雷达"） |
-| `/scan` | **2D 雷达直接发的** `LaserScan`（720 点/圈，0.1~6 m），给建图/AMCL 用 |
-| `/camera/rgb/image_raw` | RGB 相机（只发 RGB） |
-| `/imu` | IMU |
-
-TF：`odom → base_footprint → base_link → {4个轮子, laser_link, camera_link, imu_link}`
-
-### 建图默认用 2D 雷达（实车同款）
-
-实车装的是 **镭神 N10_P 2D 雷达**，所以仿真里 `/scan` 也由 2D 雷达
-（`gazebo_ros_laser`）直接发，不绕 3D 点云。
-原因：3D 那套用的 `gazebo_ros_block_laser` 插件**贴墙/在角落时会给出不可能的
-回波**（车头 0.06 m 贴墙却报 3.8~11.5 m 的点），gmapping 会把它们当墙，
-在地图外面糊出一大片扇形（已复现+量化）。换成 2D 雷达后，同样的"死顶墙"测试里
-每一束都和已知几何吻合到 2 cm 内，贴得比 `range_min` 还近的方向老实报 `inf`。
-
-```bash
-# 建图 (gmapping, 参数已按实测调过)
-roslaunch competition_robot slam_gmapping.launch
-# 另一种: 图优化 SLAM, 带回环 (已装好, 可直接对比)
-roslaunch competition_robot slam_karto.launch
-# 存图
-rosrun map_server map_saver -f ~/桌面/人工智能算法大赛/maps/my_map
-```
-
-### 航点巡航（图上标点 → 自动跑）
-
-```bash
-python3 tools/detect_marks.py 标注图.jpeg --out src/competition_robot/config/waypoints.yaml
-python3 tools/patrol.py --dry-run          # 校对点位
-python3 tools/patrol.py                    # 先 cmd_vel 原地转向, 再 DWA 直着过去
-```
-标点用 `src/competition_arena/docs/coord_world_grid.png`（每 0.5 m 一格，绿框内车停得下）。
-实测 8 个航点 + 回起点 **8/8 到达**，到点误差 ~7 cm。
-
-### 定位 + 导航（AMCL + move_base）
-
-```bash
-roslaunch competition_robot navigation.launch          # 仿真 + 地图 + AMCL + move_base + RViz
-```
-
-> **新开终端报 `RLException: ... is neither a launch file in package`？**
-> 那是因为 `devel/setup.bash` 没 source（`~/.bashrc` 里通常只有 `/opt/ros/noetic/setup.bash`，
-> 不含本工作区）。两个办法：
->
-> ```bash
-> # 办法一: 每次手动 source
-> cd ~/桌面/人工智能算法大赛 && source devel/setup.bash
->
-> # 办法二(推荐): 用包装脚本, 自动 source + 自动检查残留进程 + 自动避开 .venv
-> tools/nav.sh
-> tools/nav.sh planner:=teb
-> tools/nav.sh sim:=false          # 仿真已经在跑
-> tools/nav.sh --build              # 先 catkin_make 再启动
-> ```
->
-> 想一劳永逸，把下面这行加到 `~/.bashrc` 末尾（注意判断存在，否则新克隆的仓库会报错）：
-> ```bash
-> [ -f ~/桌面/人工智能算法大赛/devel/setup.bash ] && source ~/桌面/人工智能算法大赛/devel/setup.bash
-> ```
-
-RViz 里 `2D Pose Estimate` 定一下车的位置 → `2D Nav Goal` 点目标点，车自己开过去。
-不开 RViz 也行：
-
-```bash
-python3 tools/go_to.py 0 0            # 去场地中心
-python3 tools/go_to.py -1.5 -1.5 1.57
-```
-
-参数在 `src/competition_robot/config/nav/`（AMCL 用 **omni 模型**，局部规划
-`TrajectoryPlannerROS` 开了 `holonomic_robot`，麦轮可以横移）。
-实测：场地内连续 6 个目标点 **6/6 到达、0 次恢复行为**，AMCL 定位误差中位 **5.1 cm**。
-注意**目标点离墙留 0.4 m 以上**（场地小，膨胀给大了靠墙的点会到不了）。
-
-**想要"走得直、转弯丝滑"**：本机原来只有最老的 `TrajectoryPlannerROS`（会蛇形、
-到点前原地转圈），我已经把它的配置改好了；想更进一步就装 TEB：
-
-**三个规划器都装好并实测过了**（`bash tools/bench_nav.sh <planner>` 可复现）：
-
-| 规划器 | 直线横向偏差 | 贴墙转弯目标 | 中场转弯目标 |
-|---|---|---|---|
-| **dwa（默认）** | 5 mm | ✓ 13.9 s | — |
-| teb | 54 mm | ✗ 会摆头 | ✓ 9.2 s（最丝滑，无原地转） |
-| traj | 3 mm | ✓ 19.0 s | — |
-
-导航默认用**几何生成的干净地图**（`tools/gen_map_from_arena.py` 生成，
-边界准确、墙不厚、坐标系=世界系），比 SLAM 图可走面积多 0.4 m²、直线横向偏差更小：
-
-```bash
-python3 tools/gen_map_from_arena.py            # 重新生成
-roslaunch competition_robot navigation.launch                  # 默认 DWA + 干净地图, 哪儿都能到
-roslaunch competition_robot navigation.launch planner:=teb     # 目标在中间时更丝滑
-bash tools/bench_nav.sh teb                                    # 自己复现对比
-```
-
-> TEB 的坑：`max_vel_y>0` 会用横移抄近路（看着很怪），`weight_kinematics_nh` 给太大会摆头。
-> 配置里都已经改好（`max_vel_y: 0` + 小权重）。
-详见 [`src/competition_robot/README.md`](src/competition_robot/README.md) 第 4.5 节。
-
-**横向对比不同建图算法**（同一个不撞墙的小方框路径 + 自动打分）：
-
-```bash
-bash tools/bench_slam.sh gmapping      # -> maps/bench_gmapping.pgm + 自动打分
-bash tools/bench_slam.sh karto
-python3 tools/check_map_quality.py maps/bench_gmapping.pgm
-python3 tools/check_scan_selfhit.py    # 检查 /scan 有没有打到自己车体的假回波
-```
-
-其他可选建图方案（本机目前只装了 gmapping / karto / amcl，其余要 `apt install`）：
-
-| 方案 | 包 | 特点 |
-|---|---|---|
-| **gmapping** ✅已装 | `ros-noetic-gmapping` | 粒子滤波, 要里程计, 无回环; 小场地够用 |
-| **slam_karto** ✅已装 | `ros-noetic-slam-karto` | 图优化 + 回环, 场地大/绕圈多时更稳 |
-| hector_slam | `ros-noetic-hector-slam` | **不需要里程计**, 纯扫描匹配; 对雷达频率/转速敏感 |
-| cartographer | **Noetic 无二进制包**, 需源码编译 | 2D/3D 子图 + 回环, 最稳但最重, 要里程计+IMU |
-| rtabmap | `ros-noetic-rtabmap-ros` | 图优化, 可用 RGB-D 做视觉回环, 也能出 3D 图 |
-| LIO-SAM / FAST-LIO 等 | 源码编译 | 激光-惯性 3D SLAM, 用 3D 雷达+IMU; 本场地属于杀鸡用牛刀 |
-| octomap_server | `ros-noetic-octomap-server` | 不是 SLAM, 是把点云转成 3D 占据栅格 |
-
-**自研全向驱动插件**：`gazebo_ros_planar_move` 的实际自转只有指令的约 0.72 倍
-（根因是它的 `SetAngularVel` 会把四个车轮的角速度一起锁死）。
-本包自带 `src/holonomic_drive_plugin.cpp` 替代它，实测自转保真度 **0.994**。
-详见 [`src/competition_robot/README.md`](src/competition_robot/README.md) 第 4.3 节。
-
-改参数后重新生成：
+几何、运动学、话题名、frame 名**全部来自 `config/robot_params.yaml` 一份参数**，
+所以仿真里调好的定位 / 导航参数搬到真车不用改。改参数后重新生成 URDF：
 
 ```bash
 cd src/competition_robot && python3 scripts/gen_robot.py
 ```
 
-详细说明和**已知设计取舍**见 [`src/competition_robot/README.md`](src/competition_robot/README.md)；
-拿实车量尺寸看 [`docs/参数测量清单.md`](src/competition_robot/docs/参数测量清单.md)。
+* **为什么自研驱动插件**：Gazebo 自带的 `gazebo_ros_planar_move` 自转只有指令的约 0.72 倍
+  （它的 `SetAngularVel` 会把四个车轮角速度一起锁死）。本包自带 `holonomic_drive_plugin.cpp` 替代，
+  自转保真度 0.994。
+* **为什么建图用 2D 雷达**：3D 那套插件贴墙 / 在角落时会给出不可能的回波（车头 0.06 m 贴墙却报 3.8~11.5 m），
+  gmapping 会在地图外糊出一大片扇形。换 2D 后每一束都和已知几何吻合到 2 cm 内。
+* 详细说明与设计取舍见 [`src/competition_robot/README.md`](src/competition_robot/README.md)。
 
 ---
 
-## 10. 视觉环境（复赛「视觉识别与检测」15 分）
-
-仿真和导航跑在系统 Python 上；**深度学习 / 视觉栈单独放在仓库根的 `.venv/`**
-（已 gitignore）。之所以不用系统 Python：本机没有 pip、没有可用 sudo、`$HOME` 只读。
-
-### 一条命令重建
+## 六、建图 / 定位 / 导航
 
 ```bash
-tools/setup_vision_env.sh              # 本机（无显卡，装 CPU 版 torch）
-tools/setup_vision_env.sh --cuda 121   # 显卡机（CUDA 版本按实际填）
-tools/setup_vision_env.sh --recreate   # 清空重来
+roslaunch competition_robot navigation.launch              # 默认：干净地图 + AMCL + move_base(DWA)
+roslaunch competition_robot navigation.launch planner:=teb # 目标在中间时更丝滑
+roslaunch competition_robot slam_gmapping.launch           # 建图（参数按实测调过）
+roslaunch competition_robot slam_karto.launch              # 图优化 SLAM，可对比
+python3 tools/gen_map_from_arena.py                        # 从场几何重新生成干净地图
+python3 tools/go_to.py 0 0                                 # 不开 RViz 也能发目标点
 ```
 
-实测版本：torch `2.4.1+cpu` / torchvision `0.19.1` / ultralytics `8.4.155` /
-opencv-python `4.10.0` / numpy `1.24.4` / hyperlpr3 `0.1.3` / onnxruntime `1.19.2`
+**三个规划器都装好并实测过**（`bash tools/bench_nav.sh <planner>` 可复现）：
 
-> 详细说明、踩过的坑、搬显卡机的注意事项见 [`docs/vision_env.md`](docs/vision_env.md)。
-> 复赛要求拆解与差距分析见 [`复赛要求与差距分析.md`](复赛要求与差距分析.md)。
-
-### 车牌字符识别（已验证可用）
-
-```bash
-.venv/bin/python tools/plate_ocr.py --selftest     # 生成合成蓝牌并自检, 期望 3/3
-.venv/bin/python tools/plate_ocr.py 车牌裁剪图.png  # 识别单张
-```
-
-实测结论：HyperLPR3 自带的检测器**需要场景上下文**（纯车牌特写会漏检），
-但**识别网络对紧裁剪的车牌完美工作**（自检 3/3，置信度 0.993–0.997）。
-所以 `tools/plate_ocr.py` 只加载识别网络，正好配合
-「YOLO 框车牌 → 裁剪 → OCR」的流程。
-
-分辨率下界也测过：把官方车牌重采样到 **70 px 宽**（每字形 8.75 px）再喂识别网络，
-仍然 **3/3 全对**（含 1.2 px 模糊）。所以车牌任务的瓶颈在"把车牌框出来"，不在识别。
-
-### 识别点位与拍照距离（可直接复算）
-
-```bash
-python3 tools/gen_recognition_points.py        # 约 5 秒, 不需要起仿真
-.venv/bin/python tools/check_ocr_resolution.py # 车牌 OCR 分辨率下界
-```
-
-它把"车该停在哪个点、朝哪、目标占多少像素"从真值源**算出来**（不手填）：
-道具位姿来自 world、尺寸来自各 config、相机模型来自 `robot_params.yaml`、
-车道线/停止线从官方平面图程序提取（`config/lane_lines.json`）。
-产出 `config/recognition_points.yaml` + `docs/recognition_points.md` +
-俯视核对图 `docs/recognition_points.png`。
-
-复算结果（2026-09-21）：红绿灯停在**停止线内侧 0.10~0.16 m**、灯珠 **101 px**；
-车牌在"不压车道线"前提下最近 0.70 m、**157 px 宽**；
-两个街区的人偶**每个方向一个"正对"点位**（相机光轴垂直于立牌板面，正视度 1.00），
-画面里立牌宽 123~205 px —— 但相机只有 0.20 m 高且无俯仰，正对时下沿必然被切，
-可见高度约 60%~75%。
-
-### 最终巡检路线（航点 + 沿途识别点）
-
-```bash
-python3 tools/gen_recognition_route.py     # 把识别点按弧长插进巡检环线 -> 17 站
-./tools/run_recognition_route.sh           # 一键: 起仿真 -> 跑整条 -> 存轨迹 -> 重画图
-```
-
-路线 = 原来那条巡检环线 + 沿途 10 个识别点（10 个点离环线都只有 0.01~0.12 m），
-共 17 站。每个识别点的动作就是"**原地转向 → 直线过去 → 到点原地转到拍照朝向**"，
-正是比赛要求的"开到固定点位原地转向拍照"。实测（无头仿真）**17/17 到点、0 失败**，
-AMCL 到点误差均值 0.056 m、原地转向残余 ≤1.0°、一圈 166 s。
-路线图 `docs/recognition_route.png`（红=实测轨迹，橙=规划环线，数字=顺序）。
-
-### 三个识别模型（已入库，clone 即用）
-
-| 任务 | 权重 | 类别 | 实测 |
+| 规划器 | 直线横向偏差 | 贴墙转弯 | 中场转弯 |
 |---|---|---|---|
-| 人偶立牌 | `weights/standee_yolo11n.pt` | `comm` / `non_comm` | 密集正方形数据自测：精确 **92.5%**、召回 **98.7%**；真实场地 5 个点位计数 **10/10** |
-| 车牌 | `weights/plate_yolo11n.pt` | `plate` | 自采 105 张端到端 OCR **105/105**；独立场地数据 **87%** |
-| 红绿灯 | `weights/traffic_light_yolo11n.pt` | `red` / `yellow` / `green_light` | 自采 90 张 **90/90**；**直接检「亮着的那颗灯珠」**，不检灯箱 |
+| **dwa（默认）** | 5 mm | ✓ 13.9 s | — |
+| teb | 54 mm | ✗ 会摆头 | ✓ 9.2 s（最丝滑，无原地转） |
+| traj | 3 mm | ✓ 19.0 s | — |
 
-推理默认走 **CPU**（`--device cpu`）：三个都是 yolo11n，CPU 上立牌 79 ms / 灯 42 ms / 车牌 113 ms
-一张，够用；而 WSL 的显存和 Windows 共享，跟 Gazebo 抢会 CUDA OOM，严重时把整个 WSL 带下去（实测踩过）。
+> 目标点**离墙留 0.4 m 以上**（场地小，膨胀给大了靠墙的点会到不了）。
+> 导航默认用**几何生成的干净地图**（`maps/arena_clean.*`），比 SLAM 图边界准、可走面积大。
 
-### 识别节点与巡检联动（比赛用法：roslaunch + rosrun）
+可选建图方案（本机已装 gmapping / karto / amcl，其余需 `apt install`）：
+hector_slam（不需里程计）、cartographer（Noetic 需源码编译）、rtabmap（可做视觉回环）、
+LIO-SAM / FAST-LIO（激光惯性 3D，小场地杀鸡用牛刀）、octomap_server（点云转 3D 栅格）。
+
+---
+
+## 七、视觉识别（复赛「视觉识别与检测」15 分）
+
+### 三个模型（已入库，clone 即用）
+
+| 任务 | 权重 | 类别 | 说明 |
+|---|---|---|---|
+| 人偶立牌 | `weights/standee_yolo11n.pt` | `comm` / `non_comm` | 检**整块立牌**，再按类别计数 |
+| 车牌 | `weights/plate_yolo11n.pt` | `plate` | YOLO 框车牌 → 裁剪（外扩 10 px）→ HyperLPR3 **纯识别网络**读字符 |
+| 红绿灯 | `weights/traffic_light_yolo11n.pt` | `red` / `yellow` / `green_light` | ★ **直接检"亮着的那颗灯珠"**，框的类别就是灯态；**不做"先检灯箱再判色"** |
+
+推理默认走 **CPU**（`--device cpu`）：三个都是 yolo11n，CPU 上立牌 79 ms / 灯 42 ms / 车牌 113 ms 一张，
+够用；而 WSL 的显存和 Windows **共享**，跟 Gazebo 抢会 CUDA OOM，严重时把整个 WSL 带下去（实测踩过）。
+
+### 识别节点与巡检联动（比赛用法：只用 roslaunch / rosrun）
 
 ```bash
-rosrun competition_robot vision_detect.py            # ② 识别节点（会弹带框结果图）
+rosrun competition_robot vision_detect.py            # 识别节点，每轮独立存档
 rosrun competition_robot patrol.py \
-    --file $(rospack find competition_robot)/config/recognition_route.yaml   # ③ 巡检并自动请求识别
+    --file $(rospack find competition_robot)/config/recognition_route.yaml
 ```
 
-* 节点订阅 `/camera/rgb/image_raw`；`/vision/request`（JSON）触发一次识别，结果发 `/vision/result`。
-* **红绿灯是通行闸**：红/黄灯（以及「没看到灯」）原地停车等待，**确认绿灯才放行**；等超时默认停车结束。
-  `--light-confirm` 默认 1 —— 节点已在**一次请求内做了 3 帧投票**，不用再等第二轮
-  （灯时长见 `src/competition_arena/config/traffic_lights.yaml`，现为 绿15/黄3/红10 s）。
-* 每次运行独立存档 `vision_runs/<时间戳>/`：带框结果图 + `summary.txt` + `results.json`。
-* 详细用法 / 话题表 / 标注约定见 [`docs/vision_run.md`](docs/vision_run.md)；
-  采集世界布局见 [`docs/collect_world.md`](docs/collect_world.md)；
-  一步一坑的排查记录见 [`docs/issue_log.md`](docs/issue_log.md)（16 条）。
+* 节点订阅 `/camera/rgb/image_raw`；收到 `/vision/request`（JSON）触发一次识别，结果发 `/vision/result`。
+* **归属**：画面里常同时出现「本组正面 + 别组背面」。节点按**世界坐标**把检出分给该点位对应的那一组
+  （用检出框反算世界坐标，深度由立牌已知高度定），避免把邻居算进来。
+* **红绿灯是通行闸**：红 / 黄灯（以及「没看到灯」）原地停车等待，**确认绿灯才放行**；等超时默认停车结束。
+  节点在**一次请求内做 3 帧投票**，所以 `--light-confirm` 默认 1，不必再等第二轮。
+  灯时长见 `src/competition_arena/config/traffic_lights.yaml`（现为 绿 15 / 黄 3 / 红 10 s）。
+* 每次运行存档到 `vision_runs/<时间戳>/`：带框结果图 + `summary.txt` + `results.json`。
+* 用法 / 话题表 / **标注约定**见 [`docs/vision_run.md`](docs/vision_run.md)；
+  采集世界布局见 [`docs/collect_world.md`](docs/collect_world.md)。
 
-### 数据集怎么来的（只出图，框手工标）
+### 识别点位与拍照距离（可直接复算，不手填）
 
 ```bash
-python3 tools/build_collect_world.py --shape square --side 0.55        # 造采集世界
+python3 tools/gen_recognition_points.py     # 约 5 秒，不需要起仿真
+```
+
+道具位姿来自 world、尺寸来自各 config、相机模型来自 `robot_params.yaml`、车道线 / 停止线从官方平面图程序提取。
+产出 `config/recognition_points.yaml` + `docs/recognition_points.md` + 俯视核对图。
+
+### 最终巡检路线
+
+```bash
+python3 tools/gen_recognition_route.py      # 把识别点按弧长插进巡检环线 -> 17 站
+./tools/run_recognition_route.sh            # 一键：起仿真 -> 跑整条 -> 存轨迹 -> 重画图
+```
+
+路线 = 巡检环线 + 沿途 10 个识别点（离环线都只有 0.01~0.12 m），共 17 站。
+每个识别点的动作就是「原地转向 → 直线过去 → 到点原地转到拍照朝向」，正是比赛要求的「到固定点位转向拍照」。
+**红绿灯站被排在「同地点其它站之后」** —— 闸必须放在离开路口前的最后一步，否则先判灯再干别的活会闯红灯。
+
+---
+
+## 八、数据集与重训
+
+### 采集世界（只放相机小车 + 要识别的道具）
+
+```bash
+python3 tools/build_collect_world.py --shape square --side 0.55     # 立牌摆正方形（正面朝外）
+python3 tools/build_collect_world.py --ring-arc 60                  # 或弧形圈
 .venv/bin/python tools/gen_collect_dataset.py --rig 1 --out datasets/collect_square \
-    --only-phase square --square 240 --div-bucket dense_day            # 采 240 张
+    --only-phase square --square 240 --div-bucket dense_day         # 采 240 张
 ```
 
-采集世界（`collect.world`）只放**相机小车 + 要识别的道具**：立牌（弧形圈或正方形）、红绿灯、车牌。
-`gen_collect_dataset.py` 只出图 + `meta.jsonl`（位姿 / 灯态 / 车牌真值），**框由人在 X-AnyLabeling 里标**。
-立牌数据两种摆放：**密集正方形**（边长 0.55 m、正面朝外、相机在外圈拍，每张强制「正面 + 别人背面」同框 ——
-专治「把别的立牌的白色背板认成人」）和弧形圈多样拍摄（正对 / 斜视 / 遮挡 / 纯背面四种配方 + 三档相机高度）。
+`gen_collect_dataset.py` **只出图 + `meta.jsonl`**（位姿 / 灯态 / 车牌真值），**框由人在 X-AnyLabeling 里标**。
 
-### 仓库里哪些是「最终实现」，中间产物在哪
+* 立牌两种摆放：**密集正方形**（边长 0.55 m、正面朝外、相机在外圈拍，每张强制「正面 + 别人背面」同框 ——
+  专治「把别的立牌的白色背板认成人」）和**弧形圈多样拍摄**（正对 / 斜视 / 遮挡 / 纯背面四种配方 + 三档相机高度）。
+* 红绿灯 / 车牌按**方位角**扫（灯 ±40°/±20°/0°，车牌 ±30°/±15°/0°），因为只采正对时模型在竞技场斜视角会全漏。
+* 光照：世界构建器支持 `--sun-diffuse` / `--sun-dir`（分批换太阳）；但实测同一位姿只换太阳亮度只差 1~12%，
+  **真正治「各种光线」的是训练增强**（`tools/train_vision.py` 已把 `hsv_h/s/v`、`degrees`、`scale`、`mosaic` 显式化）。
 
-* **最终实现**：`src/competition_arena`（场地与道具）、`src/competition_robot`（机器人 / 导航 / 视觉节点 / 路线）、
-  `tools/`（点位与路线生成、采集与训练、推理与 OCR、巡航与验收）、`weights/`（三个模型）、
-  `maps/arena_clean.*`（导航地图）、`docs/`（技术文档），以及根目录的 `README.md`、`验收指南.md`、
-  `交接文档.md`、`复赛要求与差距分析.md`、`PROGRESS.md`。
-* **中间产物**：早期为调仿真 / 建图 / 雷达写的一次性脚本（`tools/bench_*`、`tools/test_mapping*.sh`、
-  `tools/check_*.py|sh` 等）**仍在仓库里** —— 它们是各阶段问题的排查证据，`docs/issue_log.md`
-  与 `验收指南.md` 直接引用。已废弃的「几何投影自动标注」管线（`meta_to_yolo.py`、
-  `gen_vision_dataset.py`）和几张 benchmark 地图则已移出（下方归档分支里都有）。
-* **完整逐步开发历史**在归档分支：`git checkout archive/sim-dev`（tag `archive/sim-dev-2026-09-25`）。
-
-### 换到显卡机
+### 重训
 
 ```bash
-git clone git@github.com:Gh0stown/AiC-2026.git && cd AiC-2026
-tools/setup_vision_env.sh --cuda 121
+tools/setup_vision_env.sh --cuda 121        # 或本机 CPU 版（见 docs/vision_env.md）
+.venv/bin/python tools/train_vision.py --data <你的 data.yaml> --epochs 300
+# 训完把 best.pt 覆盖到 weights/ 对应文件名即可（节点按固定文件名加载）
 ```
 
-`.venv/`、`.cache/`、`datasets/`、`runs/` **不入库**（体积大，脚本会重建）。
-但 **三个模型的权重已经入库**（`weights/`，6 个文件约 52 MB）：clone 下来就能直接跑识别，
-不用再手工拷权重；要换模型替换同名文件即可。
-若显卡机是 Python 3.10+，可以放开 torch 版本上限：`TORCH_VER=2.5.1 tools/setup_vision_env.sh --cuda 121`
+---
+
+## 九、验收
+
+```bash
+./tools/acceptance.sh          # 一键 6 项：加载 / 话题 / 定位 / 雷达位姿 / 巡航 / 倒车入库
+```
+
+逐项标准、预期基线值与手动分步命令见 [`验收指南.md`](验收指南.md)。
+
+---
+
+## 十、已知限制与待办
+
+* **立牌模型**的训练数据以仿真为主（实拍 / 真实光照多样性待补）；背面已作为难负样本覆盖，但**背板本身**
+  在极端角度下仍可能被误检。
+* **竞技场泛化**：车牌在独立数据上 87%、红绿灯在竞技场视角曾只有 63%（漏检为主）——
+  已按方位角补采数据，待重训后复测。
+* **红绿灯时长**在仿真里是配置项（`config/traffic_lights.yaml`）；**比赛现场以现场为准**，
+  所以节点侧的确认耗时已压到 ~1.8 s 作为保险。
+* **投影残余**（`docs/issue_log.md` #10）：按位姿投影的框与画面仍有约 20 px 偏差，
+  只影响「用投影做辅助判断」的功能，**不影响识别与计数**（归属已改走世界坐标）。
+* **倒车入库**依赖激光对墙，只在墙边 / 角落有效。
+* 仓库里保留了**早期一次性脚本**（`tools/bench_*`、`tools/test_mapping*`、`tools/check_*` 等）——
+  它们是各阶段问题的排查证据，`docs/issue_log.md` 与 `验收指南.md` 直接引用。
+
+---
+
+## 十一、文档索引
+
+| 文档 | 内容 |
+|---|---|
+| [`docs/wsl_setup.md`](docs/wsl_setup.md) | 换机器 / 首次运行：依赖、编译、WSL 注意事项 |
+| [`验收指南.md`](验收指南.md) | 三条命令启动 + 一键验收 + 6 项判定标准与基线值 |
+| [`交接文档.md`](交接文档.md) | 一句话现状 / 接手第一步 / 还差什么 |
+| [`复赛要求与差距分析.md`](复赛要求与差距分析.md) | 赛题要求逐条对照 |
+| [`docs/issue_log.md`](docs/issue_log.md) | 16 条问题记录：现象 / 根因 / 修法 / 实测数据 |
+| [`docs/vision_run.md`](docs/vision_run.md) | 识别节点的用法、话题表、标注约定 |
+| [`docs/vision_plan.md`](docs/vision_plan.md) | 视觉任务拆解与方案取舍 |
+| [`docs/vision_env.md`](docs/vision_env.md) | 视觉环境（torch / ultralytics / hyperlpr3）与踩过的坑 |
+| [`docs/collect_world.md`](docs/collect_world.md) | 采集世界的布局与四个工位 |
+| [`docs/recognition_points.md`](docs/recognition_points.md) | 10 个识别点位的位姿、距离与目标像素尺寸 |
+| [`docs/arena_build.md`](docs/arena_build.md) | 场地是怎么从官方平面图提取出来的（含 UV 旋转坑、已确认口径） |
+| [`src/competition_robot/README.md`](src/competition_robot/README.md) | 机器人包细节与设计取舍 |
+| [`src/competition_robot/docs/参数测量清单.md`](src/competition_robot/docs/参数测量清单.md) | 拿实车量尺寸用 |
