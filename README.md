@@ -111,7 +111,7 @@ AiC-2026/                                ← catkin 工作区根
 
 TF 树：`map → odom → base_footprint → base_link → {4×wheel, front/rear_caster, laser_link, camera_link, imu_link}`
 
-机器人参数：车体 0.26×0.22×0.09 m、驱动轮 r=45 mm、轮距 0.24 m、底盘离地 20 mm、总重约 2.2 kg。
+机器人参数（**以 `config/robot_params.yaml` 为准**）：车体 **0.3334 × 0.2187 × 0.1397 m**、驱动轮 r = **48.5 mm**、轮距 **0.2908 m**、前后轴 +127.2 / −79.8 mm（不对称）、总重 **1.85 kg**。
 
 ---
 
@@ -288,6 +288,7 @@ tools/setup_vision_env.sh --cuda 121        # 或本机 CPU 版（见 docs/visio
 
 | 文档 | 内容 |
 |---|---|
+| [`技术文档素材.md`](技术文档素材.md) | **写技术方案文档 / PPT 用**：架构、参数表、实测指标、难点与方案、写作建议 |
 | [`docs/wsl_setup.md`](docs/wsl_setup.md) | 换机器 / 首次运行：依赖、编译、WSL 注意事项 |
 | [`验收指南.md`](验收指南.md) | 三条命令启动 + 一键验收 + 6 项判定标准与基线值 |
 | [`交接文档.md`](交接文档.md) | 一句话现状 / 接手第一步 / 还差什么 |
