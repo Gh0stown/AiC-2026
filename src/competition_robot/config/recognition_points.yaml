@@ -158,22 +158,22 @@ points:
   clip_near_m: 0.05
   metric:
     unit: 立牌宽 px
-    value: 110.2
+    value: 115.1
     threshold: 40.0
     height_px: 315.9
     visible_frac: 0.909
     need_pitch_deg: 1.5
   view_incidence_cos: 1.0
-  frame_margin: 0.747
+  frame_margin: 0.778
   alternatives:
   - - -1.8561
     - 1.2575
     - 0.0
-    - 111.4
+    - 116.3
   - - -1.8561
     - 1.0575
     - 0.0
-    - 111.4
+    - 116.3
 - name: B_east
   task: standee
   pose:
@@ -220,7 +220,7 @@ points:
     visible_frac: 1.0
     need_pitch_deg: -0.5
   view_incidence_cos: 1.0
-  frame_margin: 0.757
+  frame_margin: 0.626
   alternatives:
   - - -0.841
     - 0.6011

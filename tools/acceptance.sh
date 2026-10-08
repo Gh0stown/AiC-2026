@@ -172,8 +172,8 @@ want = {
     '围场墙':          ['arena_walls'],
     '机器人':          ['competition_robot'],
     '红绿灯':          ['tl_top', 'tl_bot'],
-    '人偶立牌(A街区)': ['A_north_1', 'A_north_2', 'A_south_1', 'A_south_2', 'A_west_1', 'A_west_2'],
-    '人偶立牌(B街区)': ['B_north_1', 'B_north_2', 'B_east_1', 'B_east_2'],
+    '人偶立牌(A街区)': ['A_north_1', 'A_north_2', 'A_south_1', 'A_south_2', 'A_west_1'],
+    '人偶立牌(B街区)': ['B_north_1', 'B_north_2', 'B_north_3', 'B_east_1', 'B_east_2'],
     '车辆+车牌':       ['car_1_p', 'car_2_p', 'car_3_p'],
 }
 badn = 0
@@ -252,8 +252,27 @@ print('有' if d.get('reverse_park') else '无')
 " 2>/dev/null)
   hdr "5/6+6/6 最终路线巡航 ($(basename "$ROUTE"), $TOT 站) + 倒车入库($NPARK)"
   rm -f "$LOGD/trace.csv"
+  # ★ 红绿灯通行闸（issue #13）需要**识别节点在线**才能读到灯态。
+  #   验收原来只起仿真 + 导航、不起识别节点 —— 于是闸把"请求没人应答"
+  #   当成"没看到灯"，在第 1 站（tl_top）原地等满 light-max-wait 后结束本次运行，
+  #   巡航直接判失败。真实用法本来就是"导航 + 识别节点"两个都在跑，这里补齐。
+  rostopic pub -1 /traffic_light/command std_msgs/String "data: 'auto'" >/dev/null 2>&1
+  VISION_LOG="$LOGD/vision.log"
+  rosrun competition_robot vision_detect.py --no-show > "$VISION_LOG" 2>&1 &
+  VISION_PID=$!
+  for i in $(seq 1 60); do
+    grep -q '视觉识别节点已启动' "$VISION_LOG" 2>/dev/null && break
+    sleep 1
+  done
+  if grep -q '视觉识别节点已启动' "$VISION_LOG" 2>/dev/null; then
+    note "识别节点: 已启动 (红绿灯通行闸需要它在线)"
+  else
+    bad "识别节点: 起不来, 巡航会因通行闸拿不到灯态而中断 (见 $VISION_LOG)"
+  fi
+
   timeout 900 python3 tools/patrol.py --file "$ROUTE" --save-trace "$LOGD/trace.csv" \
       > "$LOGD/check5.txt" 2>&1
+  kill $VISION_PID 2>/dev/null; wait $VISION_PID 2>/dev/null
   grep -E "一圈跑完|倒车|入库|尾|位姿伺服结束" "$LOGD/check5.txt" | tail -6 | sed 's/^/      /'
   if grep -qE "$TOT/$TOT" "$LOGD/check5.txt"; then
     ok "巡航: $TOT/$TOT 站全部到达"

@@ -44,7 +44,7 @@ waypoints:
   task: standee
   shot:
     metric: 立牌宽 px
-    value: 110.2
+    value: 115.1
     threshold: 40.0
 - name: 05_mid_l
   world:

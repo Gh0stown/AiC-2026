@@ -151,8 +151,10 @@ blocks:
     - standee_c03
     - standee_c04
   - edge: west
+    # ★ 街区人偶数量对齐官方示意图(A 5 / B 5): 原 A 有 6 个(c05 与 F1 挤在只有
+    #   0.101 m 可用长度的西边上, 间距 0.090 只剩 5 mm 余量), 把 c05 匀到 B 的北边。
+    #   A 西边只留 F1(非社区), 这样 A/B 两个街区各自都仍有"社区 + 非社区"两类。
     people:
-    - standee_c05
     - standee_F1
 - name: B
   inset_m: 0.3
@@ -166,6 +168,7 @@ blocks:
     people:
     - standee_c06
     - standee_c07
+    - standee_c05          # ★ 由 A 街区匀来 (官方示意图 A/B 各 5 个)
   - edge: east
     people:
     - standee_c08
