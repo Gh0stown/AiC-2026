@@ -102,7 +102,7 @@ AiC-2026/                                ← catkin 工作区根
 | `/cmd_vel` | `geometry_msgs/Twist` | — | **全向**：`linear.x/y` 前后与横移、`angular.z` 自转 |
 | `/odom` | `nav_msgs/Odometry` | 50 Hz | 轮式里程计（仿真 / 真机同源） |
 | `/odom_groundtruth` | `nav_msgs/Odometry` | 50 Hz | Gazebo 真值，**仅仿真**，用来量定位误差 |
-| `/scan` | `sensor_msgs/LaserScan` | 15 Hz | 360° 2D 激光，720 点，0.10–8.0 m |
+| `/scan` | `sensor_msgs/LaserScan` | **10 Hz** | 360° 2D 激光，720 点/圈，**0.10–6.0 m**（实车同款镭神 N10_P） |
 | `/camera/rgb/image_raw` | `sensor_msgs/Image` | 15 Hz | 1280×960 RGB（为车牌 OCR 提的分辨率） |
 | `/imu` | `sensor_msgs/Imu` | 100 Hz | |
 | `/points` | `sensor_msgs/PointCloud2` | — | 3D 雷达点云，**默认关**（建图 / 导航不用它） |
