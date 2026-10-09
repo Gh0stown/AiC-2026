@@ -260,8 +260,9 @@ def render_plate(text, out_png, size=(400, 127)):
 
     head, serial = text.split('·')                     # 省 + 字母 | 5 位
     dot_x = int(W * 0.317)                             # 底图上防伪金点的位置
-    f_cjk = int(H * 0.54)          # 省份汉字略小于号牌字体的字高, 与实物接近
-    f_big = int(H * 0.62)
+    # 字号: 官方号牌上字符高度约占板高 45~50% (对比官方素材量得), 太大就不像了
+    f_cjk = int(H * 0.46)          # 省份汉字 (中文字体的视觉高度偏大, 所以再小一档)
+    f_big = int(H * 0.47)          # 号牌字体 (字母/数字)
 
     def spread(chars, x0, x1, font_of, top, height):
         """在 [x0,x1] 区间内均匀排开几个字 (逐字居中)"""
@@ -274,8 +275,8 @@ def render_plate(text, out_png, size=(400, 127)):
 
     spread(head, int(W * 0.045), dot_x - int(W * 0.02),
            lambda ch: cjk_font(f_cjk) if ord(ch) > 0x2000 else plate_font(f_big),
-           int(H * 0.17), int(H * 0.66))
-    spread(serial, dot_x + int(W * 0.03), int(W * 0.965),
+           int(H * 0.22), int(H * 0.60))
+    spread(serial, dot_x + int(W * 0.035), int(W * 0.945),
            lambda ch: plate_font(f_big), int(H * 0.17), int(H * 0.66))
     im.save(out_png)
     return out_png
