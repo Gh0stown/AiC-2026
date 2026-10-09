@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <sdf version="1.7">
   <model name="car_2">
-    <!-- 车辆立牌 + 车牌 (鄂D·7B5Q2)
+    <!-- 车辆立牌 + 车牌 (陕W·5QG5S)
          车板 0.345 x 0.250 x 0.005 m (官方 34.5 x 25 cm x 5mm)
          车牌 0.095 x 0.030 m (官方 9.5 x 3 cm), 贴在正面后保险杠中间 -->
     <static>true</static>

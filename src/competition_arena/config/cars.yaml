@@ -8,19 +8,19 @@
 cars:
 - name: car_1_p
   model: car_1
-  plate: 苏A·B8Q62
+  plate: 陕G·5JXFN
   parking: 3号停车位
   x: 2.056
   y: -0.501
 - name: car_2_p
   model: car_2
-  plate: 鄂D·7B5Q2
+  plate: 陕W·5QG5S
   parking: 2号停车位
   x: 2.056
   y: -1.1245
 - name: car_3_p
   model: car_3
-  plate: 苏A·PL12A
+  plate: 黑L·V006C
   parking: 1号停车位
   x: 2.056
   y: -1.762

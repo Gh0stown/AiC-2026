@@ -197,24 +197,121 @@ PLATES = [('car_1', '车牌一.png', '苏A·B8Q62'),
           ('car_3', '车牌三.png', '苏A·PL12A')]
 
 
+# =============================================================================
+#  随机车牌生成 (2026-10-09)
+#  官方要求: 每次摆场**至少两块随机车牌**, 且不要直接用复赛资料里给的那三张
+#  (那三张是固定的, 谁都能提前背下来 -> 等于没有识别难度)。
+#  规则依据: 公安部号牌正则 (见 https://blog.csdn.net/lzl640/article/details/125312808)
+#      普通汽车(蓝牌): [省简称][A-Z][A-HJ-NP-Z0-9]{5}
+#      即: 省份简称 1 位 + 发牌机关字母 1 位 + 序号 5 位 (数字/字母混合)
+#      **字母与数字都排除 I 和 O** (避免与 1/0 混淆)。
+#  生成一次即固定: 号码写进 config/cars.yaml (唯一真值源), 每次启动不再变
+#  (验收脚本 / 识别核对都按 cars.yaml 比对); 同 --seed 重跑得到同一组号牌。
+# =============================================================================
+PROVINCES = '京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼'
+PLATE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'          # 发牌机关代号 (去 I/O)
+PLATE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ0123456789'  # 序号可用字符 (去 I/O)
+
+PLATE_BG = (44, 76, 177)        # 官方蓝底 (取自 车牌背景.png 的中心像素)
+PLATE_FG = (255, 255, 255)
+PLATE_BORDER = 3                # 白边宽 (px)
+PLATE_PX = (200, 81)            # 与官方 PNG 同尺寸 (9.5 x 3 cm)
+
+
+def gen_plate(rng):
+    """生成一块合规的蓝牌号: 省简称 + 字母 + '·' + 5 位"""
+    return '%s%s·%s' % (rng.choice(PROVINCES), rng.choice(PLATE_LETTERS),
+                        ''.join(rng.choice(PLATE_CHARS) for _ in range(5)))
+
+
+def render_plate(text, out_png, size=PLATE_PX):
+    """按官方样式画车牌: 白边 + 蓝底 + 白字 (省简称 + 字母 + 圆点 + 5 位)。
+
+    ★ 排版必须"按字宽排 + 自动缩放": 官方 200x81 px 里要放下 7 个字符 +
+      一个分隔圆点。第一版用固定字距, 结果字体过大、后面几个字被排到板子外面
+      被裁掉 (实测)。这里先用等宽测量再决定字号, 保证总宽 <= 可用宽度。
+    """
+    from PIL import Image, ImageDraw, ImageFont
+    W, H = size
+    im = Image.new('RGB', (W, H), PLATE_FG)
+    d = ImageDraw.Draw(im)
+    d.rectangle([PLATE_BORDER, PLATE_BORDER, W - 1 - PLATE_BORDER, H - 1 - PLATE_BORDER],
+                fill=PLATE_BG)
+
+    def font(px):
+        for fp in ('/mnt/c/Windows/Fonts/msyhbd.ttc', '/mnt/c/Windows/Fonts/simhei.ttf',
+                   '/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf'):
+            if os.path.isfile(fp):
+                try:
+                    return ImageFont.truetype(fp, px)
+                except Exception:                               # noqa: BLE001
+                    pass
+        return ImageFont.load_default()
+
+    head, serial = text.split('·')
+    glyphs = list(head) + ['·'] + list(serial)          # 省 + 字母 + · + 5 位 = 8 个
+    avail = W - 2 * PLATE_BORDER - 10                   # 可用宽度
+    gap = 2
+    dot_w = 8
+    for px in (int(H * 0.56), int(H * 0.5), int(H * 0.46)):
+        f = font(px)
+        widths = [dot_w if g == '·' else d.textlength(g, font=f) for g in glyphs]
+        total = sum(widths) + gap * (len(glyphs) - 1)
+        if total <= avail:
+            break
+    x = (W - total) / 2.0                               # 水平居中
+    for g, w in zip(glyphs, widths):
+        if g == '·':
+            d.ellipse([x + (w - 6) / 2, H / 2 - 3, x + (w + 6) / 2, H / 2 + 4], fill=PLATE_FG)
+        else:
+            d.text((x + w / 2, H / 2), g, font=f, fill=PLATE_FG, anchor='mm')
+        x += w + gap
+    im.save(out_png)
+    return out_png
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--remove', action='store_true')
     ap.add_argument('--show', action='store_true')
     ap.add_argument('--models-only', dest='models_only', action='store_true')
+    ap.add_argument('--random-plates', type=int, default=3, dest='random_plates',
+                    help='随机生成几块车牌 (默认 3 = 全部自造; 官方要求至少 2 块随机)')
+    ap.add_argument('--seed', type=int, default=20261009, help='随机种子 (同种子得到同一组号牌)')
+    ap.add_argument('--official', action='store_true',
+                    help='用官方素材里的三张固定车牌图 (默认不用, 改为自己生成)')
     a = ap.parse_args()
 
     if not os.path.isdir(SRC):
         sys.exit('找不到官方素材: %s' % SRC)
 
+    # ★ 号牌: 默认自己生成 (官方要求至少 2 块随机), 生成结果写进 cars.yaml 当真相
+    import random
+    rng = random.Random(a.seed)
+    plates = []
+    for i, (model, png, text) in enumerate(PLATES):
+        use_random = (not a.official) and i < max(0, min(a.random_plates, len(PLATES)))
+        plates.append((model, png, gen_plate(rng) if use_random else text,
+                       use_random))
+    print('  号牌 (seed=%d):' % a.seed)
+    for model, png, text, rnd in plates:
+        print('    %-8s %-12s %s' % (model, text, '自造(随机)' if rnd else '官方素材'))
+    tmpdir = os.path.join('/tmp', 'plate_gen')
+    os.makedirs(tmpdir, exist_ok=True)
+
     # 车牌 N -> N 号停车位; 车位里车板朝 -x, 靠外侧(墙侧)放
     plan = []
-    for i, ((model, png, text), (pname, y0, y1)) in enumerate(zip(PLATES, PARKING), 1):
+    for i, ((model, png, text, rnd), (pname, y0, y1)) in enumerate(zip(plates, PARKING), 1):
         cy = (y0 + y1) / 2.0
         plan.append(dict(name='%s_%s' % (model, 'p'), model=model, plate=text,
                          parking=pname, x=LANE_X1 - 0.02, y=round(cy, 4)))
         if not a.show:
-            write_car_model(model, os.path.join(SRC, png), text)
+            if rnd:
+                pp = os.path.join(tmpdir, '%s_plate.png' % model)
+                render_plate(text, pp)
+            else:
+                pp = os.path.join(SRC, png)
+            write_car_model(model, pp, text)
 
     if a.show:
         print('  %-8s %-12s %-12s %s' % ('模型', '车牌', '停车位', '位置 (x, y)'))
