@@ -283,6 +283,45 @@ def plan(layout, args, rng):
     #     也有别的组的**背面**(大白板, 近且大)。原来只采弧形圈里正对拍, 模型没见过
     #     这种"正反面同框"。
     #   硬判据: 每张图必须**同时**出现 >=1 个正面(c>0.35) 和 >=1 个背面(c<-0.35)。
+    # ---- ★ 比赛场地采集: 机位 = 真实识别点位 (立牌/红绿灯/车牌都支持) ----
+    #   为什么: 采集世界里物料是人为摆成圆环/正方形的, 信息量低 (姿态与真实布局无关);
+    #   场地里机位就是部署时的真实点位, 背景/邻组背面/车道线都是真的, 几十张就够。
+    #   红绿灯还要把三态都采到 (亮态由 /traffic_light/command 驱动, 见 capture())。
+    if getattr(args, 'arena', 0):
+        rp = os.path.join(WS, 'src', 'competition_robot', 'config',
+                          'recognition_points.yaml')
+        pts = yaml.safe_load(open(rp, encoding='utf-8'))
+        pts = pts['points'] if isinstance(pts, dict) else pts
+        jp, jd = [float(v) for v in args.arena_jitter.split(',')]
+        want_tasks = [t.strip() for t in str(args.arena_tasks).split(',') if t.strip()]
+        for pt in pts:
+            task = pt.get('task')
+            if task not in want_tasks:
+                continue
+            px, py, pyaw = [float(v) for v in pt['pose']]
+            # 红绿灯: 三种状态各拍一遍 (状态由命令行驱动, meta 记 commanded_light)
+            lights_todo = ('red', 'yellow', 'green') if task == 'traffic_light' else ['auto']
+            for lt in lights_todo:
+                for k in range(args.arena):
+                    jx = rng.uniform(-jp, jp); jy = rng.uniform(-jp, jp)
+                    jyaw = math.radians(rng.uniform(-jd, jd))
+                    cx_, cy_ = px + jx, py + jy
+                    if task == 'standee':
+                        grp = [o for o in standees if o['name'].startswith(pt['name'])]
+                    elif task == 'traffic_light':
+                        grp = [o for o in lights if o['name'] == pt['name']]
+                    else:
+                        grp = [o for o in cars if o['name'].startswith(pt['name'])]
+                    d = min((math.hypot(o['x'] - cx_, o['y'] - cy_) for o in grp),
+                            default=0.5)
+                    plans.append(dict(phase='arena', target=pt['name'],
+                                      x=cx_, y=cy_, yaw=wrap(pyaw + jyaw), dist=d,
+                                      angle=round(math.degrees(jyaw), 2),
+                                      recipe='arena_%s' % task, bucket=args.div_bucket,
+                                      commanded_light=lt, light=lt,
+                                      note='场地采集(识别点位)'))
+        return plans, objs
+
     if args.square:
         L = args.square_side
         lo, hi = [float(v) for v in args.square_dist.split(':')]
@@ -472,7 +511,7 @@ def capture(args, plans, objs, out_dir):
         #   相机高度 (mount[2]), 否则相机比投影假设的低 0.18 m, 目标整体被顶出画面。
         #   完整机器人 (competition_robot) 则相反: 它有重力, 落到 0 之后相机正好在
         #   mount[2], 所以给个小 z 让它落下去就行。
-        z = p.get('z', rob['mount'][2] if args.rig else 0.02)
+        z = p.get('z') or (rob['mount'][2] if args.rig else 0.02)   # None/0 都按默认 (采集世界用相机安装高, 场地用 0.02 的落地高)
         ms.pose.position.x, ms.pose.position.y, ms.pose.position.z = p['x'], p['y'], z
         ms.pose.orientation.z = math.sin(p['yaw'] / 2.0)
         ms.pose.orientation.w = math.cos(p['yaw'] / 2.0)
@@ -499,7 +538,7 @@ def capture(args, plans, objs, out_dir):
                     if args.img_ext == 'jpg' else [])
         meta.write(json.dumps(dict(
             file='images/%s.%s' % (fn, args.img_ext), phase=p['phase'],
-            target=p['target'], dist=round(p['dist'], 3),
+            target=p['target'], dist=round(p.get('dist', 0.5), 3),
             angle=p.get('angle'),
             recipe=p.get('recipe'), bucket=p.get('bucket'),
             n_front=p.get('n_front'), n_back=p.get('n_back'),
@@ -563,6 +602,14 @@ def main():
     ap.add_argument('--div-bucket', default='div',
                     help='本批的名字, 会写进 meta 的 bucket (按光照分批时用来区分)')
     ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--arena', type=int, default=0,
+                    help='★ 比赛场地采集: 每个识别点位拍几张 (5 个立牌点位 x N)。'
+                         '机位取 recognition_points.yaml 的点位位姿 + 小幅抖动 '
+                         '(真实到点误差量级), 数据分布与部署一致, 几十张即可')
+    ap.add_argument('--arena-jitter', default='0.03,4.0',
+                    help='场地采集抖动: "位置 m, 角度 度"')
+    ap.add_argument('--arena-tasks', default='standee',
+                    help='场地采集覆盖哪些任务: standee / traffic_light / plate (逗号分隔)')
     ap.add_argument('--dry-run', action='store_true', help='不连仿真, 只打印拍摄规划')
     ap.add_argument('--append', action='store_true',
                     help='追加到已有数据集目录(分批采集用), 不覆盖已有图/meta')
