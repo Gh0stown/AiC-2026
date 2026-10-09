@@ -22,7 +22,7 @@
         <material><ambient>0.94 0.94 0.93 1</ambient><diffuse>0.94 0.94 0.93 1</diffuse></material>
       </visual>
       <visual name="art">
-        <pose>-0.0031 0 0.0790 0 0 0</pose>
+        <pose>-0.0020 0 0.0790 0 0 0</pose>
         <geometry><box><size>0.0012 0.0553 0.1500</size></box></geometry>
         <material>
           <script>

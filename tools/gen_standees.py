@@ -220,8 +220,10 @@ material %s
 </sdf>
 '''.format(name=name, h=h, w=w, t=THICK, zb=z_board, mat=mat_name,
            bx=BASE_X, bh=BASE_H, zbh=BASE_H / 2.0,
-           # 贴图面贴在板前 -x 侧, 让 0.6mm 防 z-fighting
-           xa=-(THICK / 2.0 + 0.0012 / 2.0),
+           # 贴图层嵌在板前面内 (只外凸 0.1mm, 防 z-fighting):
+           #   板 x ∈ [-t/2, +t/2]; 贴图层厚 1.2mm, 其前面在 -(t/2 + 0.0001)
+           #   -> 总厚 = t + 0.1mm = 5.1mm, 与官方 5mm 基本一致
+           xa=-(THICK / 2.0 + 0.0001) + 0.0006,
            # 碰撞体: 官方统一外接尺寸 15 x 5 x 0.5 cm
            cw=OFFICIAL_W, ch=OFFICIAL_H)
     with open(os.path.join(d, 'model.sdf'), 'w') as f:
