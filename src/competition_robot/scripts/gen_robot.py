@@ -163,6 +163,8 @@ WHEEL_MESH = {
 
 MATERIALS = """
   <material name="chassis"><color rgba="0.22 0.24 0.28 1.0"/></material>
+  <material name="frame"><color rgba="0.74 0.76 0.80 1.0"/></material>
+  <material name="label"><color rgba="0.90 0.33 0.08 1.0"/></material>
   <material name="wheel_hub"><color rgba="0.85 0.45 0.10 1.0"/></material>
   <material name="wheel_roller"><color rgba="0.20 0.20 0.22 1.0"/></material>
   <material name="sensor"><color rgba="0.15 0.65 0.85 1.0"/></material>
@@ -244,12 +246,24 @@ def build(params):
         # 实车 STL 的坐标原点就是 base_link, 偏移已经做在模型里了, 不用再加
         out.append(mesh_visual('mecanum/base_link.STL', name, 'chassis'))
     else:
-        out.append('    <visual>\n'
-                   '      <origin xyz="%s" rpy="0 0 0"/>\n'
-                   '      <geometry><box size="%s %s %s"/></geometry>\n'
-                   '      <material name="chassis"/>\n'
-                   '    </visual>\n'
-                   % (co, f(c['length']), f(c['width']), f(c['height'])))
+        # ★ 自研低顶架 (2026-10-09): 底板 + 四立柱 + 顶板 + 电池盒 + 工控机 + 队伍标牌
+        #   顶面 0.115 m, 因此雷达可装在顶板上方 0.14 m (既扫得到 15 cm 立牌,
+        #   又不会被自身遮挡, 可整圈扫描)。
+        def part(name, size, xyz, mat='frame'):
+            out.append('    <visual name="%s">\n'
+                       '      <origin xyz="%s" rpy="0 0 0"/>\n'
+                       '      <geometry><box size="%s"/></geometry>\n'
+                       '      <material name="%s"/>\n'
+                       '    </visual>\n' % (name, xyz, size, mat))
+        part('deck',      '0.330 0.215 0.008', '0.0265 0 0.068')
+        for i, (px, py) in enumerate(((0.168, 0.098), (0.168, -0.098),
+                                      (-0.118, 0.098), (-0.118, -0.098))):
+            part('post%d' % i, '0.014 0.014 0.038', '%s %s 0.0900' % (px, py))
+        part('top_plate', '0.310 0.190 0.006', '0.0265 0 0.112')
+        part('battery',   '0.100 0.070 0.045', '-0.090 0 0.0945', 'chassis')
+        part('pc',        '0.120 0.080 0.030', '0.115 0 0.0870', 'chassis')
+        part('label',     '0.002 0.100 0.028', '0.1925 0 0.0700', 'label')
+        part('cam_post',  '0.020 0.020 0.085', '0.1491 0 0.1575')
     out.append('    <collision>\n'
                '      <origin xyz="%s" rpy="0 0 0"/>\n'
                '      <geometry><box size="%s %s %s"/></geometry>\n'

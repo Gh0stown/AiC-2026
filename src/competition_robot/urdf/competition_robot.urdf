@@ -4,19 +4,21 @@
   改参数请编辑 config/robot_params.yaml, 然后重新运行:
       python3 scripts/gen_robot.py
 
-  生成时间   : 2026-10-09 18:31:27
+  生成时间   : 2026-10-09 18:51:11
   底盘构型   : 四轮麦克纳姆 (X 型布局)
   轮径/轮宽  : 0.0485 / 0.0506 m
   轴距/轮距  : 0.2070 / 0.2908 m
   前/后轮 x  : +0.1272 / -0.0798 m  (前后不对称, 自转系数 0.2726 / 0.2252)
   整车质量   : 1.85 kg (车体) + 4 x 0.05 kg (轮) = 2.06 kg
   base_link  : 与 base_footprint 重合, 都在地面 (和实车一致)
-  车体中心   : 相对 base_link 偏移 0.0265 0.0000 0.0974
+  车体中心   : 相对 base_link 偏移 0.0265 0.0000 0.0590
   驱动方式   : planar_move
 -->
 <robot name="competition_robot">
 
   <material name="chassis"><color rgba="0.22 0.24 0.28 1.0"/></material>
+  <material name="frame"><color rgba="0.74 0.76 0.80 1.0"/></material>
+  <material name="label"><color rgba="0.90 0.33 0.08 1.0"/></material>
   <material name="wheel_hub"><color rgba="0.85 0.45 0.10 1.0"/></material>
   <material name="wheel_roller"><color rgba="0.20 0.20 0.22 1.0"/></material>
   <material name="sensor"><color rgba="0.15 0.65 0.85 1.0"/></material>
@@ -31,19 +33,64 @@
 
   <!-- 车体 -->
   <link name="base_link">
-    <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="package://competition_robot/meshes/mecanum/base_link.STL"/></geometry>
+    <visual name="deck">
+      <origin xyz="0.0265 0 0.068" rpy="0 0 0"/>
+      <geometry><box size="0.330 0.215 0.008"/></geometry>
+      <material name="frame"/>
+    </visual>
+    <visual name="post0">
+      <origin xyz="0.168 0.098 0.0900" rpy="0 0 0"/>
+      <geometry><box size="0.014 0.014 0.038"/></geometry>
+      <material name="frame"/>
+    </visual>
+    <visual name="post1">
+      <origin xyz="0.168 -0.098 0.0900" rpy="0 0 0"/>
+      <geometry><box size="0.014 0.014 0.038"/></geometry>
+      <material name="frame"/>
+    </visual>
+    <visual name="post2">
+      <origin xyz="-0.118 0.098 0.0900" rpy="0 0 0"/>
+      <geometry><box size="0.014 0.014 0.038"/></geometry>
+      <material name="frame"/>
+    </visual>
+    <visual name="post3">
+      <origin xyz="-0.118 -0.098 0.0900" rpy="0 0 0"/>
+      <geometry><box size="0.014 0.014 0.038"/></geometry>
+      <material name="frame"/>
+    </visual>
+    <visual name="top_plate">
+      <origin xyz="0.0265 0 0.112" rpy="0 0 0"/>
+      <geometry><box size="0.310 0.190 0.006"/></geometry>
+      <material name="frame"/>
+    </visual>
+    <visual name="battery">
+      <origin xyz="-0.090 0 0.0945" rpy="0 0 0"/>
+      <geometry><box size="0.100 0.070 0.045"/></geometry>
       <material name="chassis"/>
     </visual>
+    <visual name="pc">
+      <origin xyz="0.115 0 0.0870" rpy="0 0 0"/>
+      <geometry><box size="0.120 0.080 0.030"/></geometry>
+      <material name="chassis"/>
+    </visual>
+    <visual name="label">
+      <origin xyz="0.1925 0 0.0700" rpy="0 0 0"/>
+      <geometry><box size="0.002 0.100 0.028"/></geometry>
+      <material name="label"/>
+    </visual>
+    <visual name="cam_post">
+      <origin xyz="0.1491 0 0.1575" rpy="0 0 0"/>
+      <geometry><box size="0.020 0.020 0.085"/></geometry>
+      <material name="frame"/>
+    </visual>
     <collision>
-      <origin xyz="0.0265 0 0.0974" rpy="0 0 0"/>
-      <geometry><box size="0.3334 0.2187 0.1397"/></geometry>
+      <origin xyz="0.0265 0 0.059" rpy="0 0 0"/>
+      <geometry><box size="0.3334 0.2187 0.118"/></geometry>
     </collision>
       <inertial>
-        <origin xyz="0.0265 0 0.0974" rpy="0 0 0"/>
+        <origin xyz="0.0265 0 0.059" rpy="0 0 0"/>
         <mass value="1.85"/>
-        <inertia ixx="0.010382" ixy="0" ixz="0" iyy="0.020145" iyz="0" izz="0.02451"/>
+        <inertia ixx="0.00952" ixy="0" ixz="0" iyy="0.019283" iyz="0" izz="0.02451"/>
       </inertial>
   </link>
 
@@ -52,9 +99,54 @@
 
   <link name="fl_wheel_link">
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="package://competition_robot/meshes/mecanum/front_left_wheel.STL"/></geometry>
+      <origin xyz="0 0 0" rpy="1.5707963 0 0"/>
+      <geometry><cylinder radius="0.03492" length="0.0506"/></geometry>
       <material name="wheel_hub"/>
+    </visual>
+    <visual>
+      <origin xyz="0.04171 0 0" rpy="0 0.785398 1.570796"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="0.031952 0 0.026811" rpy="0 0.998368 2.142085"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="0.007243 0 0.041076" rpy="0 1.447698 2.34854"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.020855 0 0.036122" rpy="0 1.932163 2.284521"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.039195 0 0.014266" rpy="0 2.297571 1.900345"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.039195 0 -0.014266" rpy="0 2.297571 1.241248"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.020855 0 -0.036122" rpy="0 1.932163 0.857072"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="0.007243 0 -0.041076" rpy="0 1.447698 0.793052"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="0.031952 0 -0.026811" rpy="0 0.998368 0.999508"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="1.5707963 0 0"/>
@@ -85,9 +177,54 @@
 
   <link name="fr_wheel_link">
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="package://competition_robot/meshes/mecanum/front_right_wheel.STL"/></geometry>
+      <origin xyz="0 0 0" rpy="1.5707963 0 0"/>
+      <geometry><cylinder radius="0.03492" length="0.0506"/></geometry>
       <material name="wheel_hub"/>
+    </visual>
+    <visual>
+      <origin xyz="0.04171 0 0" rpy="0 0.785398 1.570796"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="0.031952 0 0.026811" rpy="0 0.998368 2.142085"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="0.007243 0 0.041076" rpy="0 1.447698 2.34854"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.020855 0 0.036122" rpy="0 1.932163 2.284521"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.039195 0 0.014266" rpy="0 2.297571 1.900345"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.039195 0 -0.014266" rpy="0 2.297571 1.241248"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.020855 0 -0.036122" rpy="0 1.932163 0.857072"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="0.007243 0 -0.041076" rpy="0 1.447698 0.793052"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="0.031952 0 -0.026811" rpy="0 0.998368 0.999508"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="1.5707963 0 0"/>
@@ -118,9 +255,54 @@
 
   <link name="rl_wheel_link">
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="package://competition_robot/meshes/mecanum/back_left_wheel.STL"/></geometry>
+      <origin xyz="0 0 0" rpy="1.5707963 0 0"/>
+      <geometry><cylinder radius="0.03492" length="0.0506"/></geometry>
       <material name="wheel_hub"/>
+    </visual>
+    <visual>
+      <origin xyz="0.04171 0 0" rpy="0 0.785398 1.570796"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="0.031952 0 0.026811" rpy="0 0.998368 2.142085"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="0.007243 0 0.041076" rpy="0 1.447698 2.34854"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.020855 0 0.036122" rpy="0 1.932163 2.284521"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.039195 0 0.014266" rpy="0 2.297571 1.900345"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.039195 0 -0.014266" rpy="0 2.297571 1.241248"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.020855 0 -0.036122" rpy="0 1.932163 0.857072"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="0.007243 0 -0.041076" rpy="0 1.447698 0.793052"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="0.031952 0 -0.026811" rpy="0 0.998368 0.999508"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="1.5707963 0 0"/>
@@ -151,9 +333,54 @@
 
   <link name="rr_wheel_link">
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="package://competition_robot/meshes/mecanum/back_right_wheel.STL"/></geometry>
+      <origin xyz="0 0 0" rpy="1.5707963 0 0"/>
+      <geometry><cylinder radius="0.03492" length="0.0506"/></geometry>
       <material name="wheel_hub"/>
+    </visual>
+    <visual>
+      <origin xyz="0.04171 0 0" rpy="0 0.785398 1.570796"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="0.031952 0 0.026811" rpy="0 0.998368 2.142085"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="0.007243 0 0.041076" rpy="0 1.447698 2.34854"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.020855 0 0.036122" rpy="0 1.932163 2.284521"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.039195 0 0.014266" rpy="0 2.297571 1.900345"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.039195 0 -0.014266" rpy="0 2.297571 1.241248"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="-0.020855 0 -0.036122" rpy="0 1.932163 0.857072"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="0.007243 0 -0.041076" rpy="0 1.447698 0.793052"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
+    </visual>
+    <visual>
+      <origin xyz="0.031952 0 -0.026811" rpy="0 0.998368 0.999508"/>
+      <geometry><cylinder radius="0.01067" length="0.053636"/></geometry>
+      <material name="wheel_roller"/>
     </visual>
     <collision>
       <origin xyz="0 0 0" rpy="1.5707963 0 0"/>
@@ -187,9 +414,13 @@
   <link name="laser_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="package://competition_robot/meshes/sensor/laser_link.STL"/></geometry>
+      <geometry><cylinder radius="0.05" length="0.05"/></geometry>
       <material name="sensor"/>
     </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.05" length="0.05"/></geometry>
+    </collision>
       <inertial>
         <origin xyz="0 0 0" rpy="0 0 0"/>
         <mass value="0.2"/>
@@ -199,7 +430,7 @@
   <joint name="laser_joint" type="fixed">
     <parent link="base_link"/>
     <child link="laser_link"/>
-    <origin xyz="0.32 0 0.12" rpy="0 0 0"/>
+    <origin xyz="0.02 0 0.14" rpy="0 0 0"/>
   </joint>
   <gazebo reference="laser_link">
     <sensor type="ray" name="lidar2d">
@@ -211,8 +442,8 @@
           <horizontal>
             <samples>720</samples>
             <resolution>1</resolution>
-            <min_angle>-2.443461</min_angle>
-            <max_angle>2.443461</max_angle>
+            <min_angle>-3.141593</min_angle>
+            <max_angle>3.141593</max_angle>
           </horizontal>
         </scan>
         <range>
@@ -234,9 +465,13 @@
   <link name="camera_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="package://competition_robot/meshes/sensor/camera_link.STL"/></geometry>
+      <geometry><box size="0.03 0.10 0.03"/></geometry>
       <material name="sensor"/>
     </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.03 0.10 0.03"/></geometry>
+    </collision>
       <inertial>
         <origin xyz="0 0 0" rpy="0 0 0"/>
         <mass value="0.17"/>
@@ -272,9 +507,13 @@
   <link name="imu_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
-      <geometry><mesh filename="package://competition_robot/meshes/sensor/imu_link.STL"/></geometry>
+      <geometry><box size="0.04 0.04 0.015"/></geometry>
       <material name="sensor"/>
     </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.04 0.04 0.015"/></geometry>
+    </collision>
       <inertial>
         <origin xyz="0 0 0" rpy="0 0 0"/>
         <mass value="0.02"/>
