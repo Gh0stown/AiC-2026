@@ -85,6 +85,10 @@ class Patrol(object):
         #   ★ 识别是独立节点 (src/competition_robot/scripts/vision_detect.py) ——
         #     比赛方要的是 roslaunch 起世界 + rosrun 起节点, 不搞"一个脚本全包"。
         self.vision_pub = rospy.Publisher('/vision/request', String, queue_size=5)
+        # ★ 汇总要用**自己的话题** —— 原来借用 vision_pub 发空串, 实际发到了
+        #   /vision/request 上, 识别节点把它当成"一次空请求"(point=''), 于是
+        #   ① 终端汇总里凭空多一行 `?=...` ② 多存一张图 ③ 汇总/落盘要等节点关闭才发生。
+        self.summary_pub = rospy.Publisher('/vision/summary', String, queue_size=1)
         self.vision_res = None
         rospy.Subscriber('/vision/result', String, self.cb_vision, queue_size=5)
 
@@ -612,12 +616,15 @@ def main():
             else:
                 if return_to and not a.no_return_start:
                     p.go_to('return', return_to[0], return_to[1], yaw_home)
-                try:
-                    p.vision_pub.publish(String(data=''))       # 让识别节点打印/落盘汇总
-                    rospy.sleep(0.5)
-                except Exception:                               # noqa: BLE001
-                    pass
                 rospy.loginfo('一圈跑完: %d/%d 个航点成功' % (ok_n, len(wps)))
+            # ★ 让识别节点打印并**落盘**汇总(summary.txt)。
+            #   原来这段只在"没有倒车入库"的分支里, 于是带入库的正常跑完反而不落盘 ——
+            #   而验收/交付都要看这份汇总。挪到两个分支之外, 两条路都发。
+            try:
+                p.summary_pub.publish(String(data=''))          # -> /vision/summary
+                rospy.sleep(0.5)
+            except Exception:                                   # noqa: BLE001
+                pass
             if not a.loop:
                 break
     except KeyboardInterrupt:

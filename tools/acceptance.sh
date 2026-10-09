@@ -10,6 +10,8 @@
 #
 #  检查项:
 #     1. 场景完整性   —— 场地/红绿灯/人偶/车辆模型是否都在
+#     7. 识别三项核对 —— 人偶逐点位/街区统计/车牌/红绿灯 + 终端与图像双通道存档
+#     8. 红绿灯通行闸 —— 巡航中确认绿灯才放行(不误拦) + 强制红灯时原地停到超时
 #     2. 红绿灯切换   —— 红->绿->黄循环, 且任何时刻都不会三灯全灭
 #     3. 定位精度     —— AMCL 估计 vs Gazebo 真值
 #     4. 雷达位姿     —— 用 /scan 反推的位姿 vs AMCL (检验雷达标定)
@@ -158,7 +160,7 @@ sleep 3
 echo "  就绪 (Gazebo 服务 + move_base + AMCL 都在)"
 
 # ---------------------------------------------------------------- 1. 场景
-hdr "1/6 场景完整性"
+hdr "1/8 场景完整性"
 python3 - "$LOGD/models.txt" <<'PY' 2>&1 | tee "$LOGD/check1.txt"
 import sys, rospy
 from gazebo_msgs.srv import GetWorldProperties
@@ -192,7 +194,7 @@ else
 fi
 
 # ---------------------------------------------------------------- 2. 红绿灯
-hdr "2/6 红绿灯切换"
+hdr "2/8 红绿灯切换"
 timeout 90 python3 tools/verify_traffic_light.py > "$LOGD/check2.txt" 2>&1
 if [ $? -eq 0 ]; then
   ok "红绿灯: $(grep -oE '✓ [0-9]+/[0-9]+ 全部正确' "$LOGD/check2.txt" | tail -1)"
@@ -202,7 +204,7 @@ fi
 grep -E "^tl_|结论" "$LOGD/check2.txt" | sed 's/^/      /'
 
 # ---------------------------------------------------------------- 3. 定位
-hdr "3/6 定位精度 (AMCL vs 真值)"
+hdr "3/8 定位精度 (AMCL vs 真值)"
 timeout 120 python3 tools/check_localization.py --duration 25 > "$LOGD/check3.txt" 2>&1
 V=$(grep -oE "均值 [0-9]+\.[0-9]+ m" "$LOGD/check3.txt" | grep -oE "[0-9]+\.[0-9]+" | head -1)
 if [ -n "${V:-}" ]; then
@@ -217,7 +219,7 @@ fi
 grep -E "位置误差|朝向误差" "$LOGD/check3.txt" | sed 's/^/      /'
 
 # ---------------------------------------------------------------- 4. 雷达位姿
-hdr "4/6 雷达位姿标定"
+hdr "4/8 雷达位姿标定"
 timeout 150 python3 tools/check_laser_pose.py > "$LOGD/check4.txt" 2>&1
 grep -E "^\(" "$LOGD/check4.txt" | tail -4 | sed 's/^/      /'
 LR=$(grep -oE "[0-9]+\.[0-9]+ mm */ *[0-9]+\.[0-9]+ mm" "$LOGD/check4.txt" | tail -1)
@@ -234,9 +236,9 @@ fi
 
 # ---------------------------------------------------------------- 5/6. 巡逻 + 入库
 if $QUICK; then
-  hdr "5/6 巡航  (--quick 跳过)"
+  hdr "5/8 巡航  (--quick 跳过)"
   note "巡航: 已跳过 (去掉 --quick 会跑)"
-  hdr "6/6 倒车入库"
+  hdr "6/8 倒车入库"
   note "倒车入库: 已跳过"
 else
   TOT=$(python3 -c "
@@ -250,7 +252,7 @@ import yaml
 d=yaml.safe_load(open('$ROUTE'))
 print('有' if d.get('reverse_park') else '无')
 " 2>/dev/null)
-  hdr "5/6+6/6 最终路线巡航 ($(basename "$ROUTE"), $TOT 站) + 倒车入库($NPARK)"
+  hdr "5/8+6/8 最终路线巡航 ($(basename "$ROUTE"), $TOT 站) + 倒车入库($NPARK)"
   rm -f "$LOGD/trace.csv"
   # ★ 红绿灯通行闸（issue #13）需要**识别节点在线**才能读到灯态。
   #   验收原来只起仿真 + 导航、不起识别节点 —— 于是闸把"请求没人应答"
@@ -272,7 +274,6 @@ print('有' if d.get('reverse_park') else '无')
 
   timeout 900 python3 tools/patrol.py --file "$ROUTE" --save-trace "$LOGD/trace.csv" \
       > "$LOGD/check5.txt" 2>&1
-  kill $VISION_PID 2>/dev/null; wait $VISION_PID 2>/dev/null
   grep -E "一圈跑完|倒车|入库|尾|位姿伺服结束" "$LOGD/check5.txt" | tail -6 | sed 's/^/      /'
   if grep -qE "$TOT/$TOT" "$LOGD/check5.txt"; then
     ok "巡航: $TOT/$TOT 站全部到达"
@@ -319,6 +320,63 @@ PY
       bad "车道合规: 有 $VIOL 帧闯进街区"
     fi
   fi
+
+  # ---------------------------------------------------------- 7/8 识别三项核对
+  #  ★ 2026-10-08 补: 原来 6 项只覆盖"场景/灯切换/定位/雷达/巡航/入库/压线",
+  #    三类识别(15 分)一个自动检查都没有。这一项从**巡航日志 + vision_runs 存档**
+  #    离线核对: 人偶逐点位数量、街区统计(赛题要求)、车牌字符、红绿灯状态、
+  #    以及"终端与图像一一对应"的双通道存档。只用日志与存档, 不需要额外起仿真。
+  hdr "7/8 识别三项核对（人偶逐点位 + 街区统计 + 车牌 + 红绿灯 + 双通道存档）"
+  # ★ 显式指向**巡航那一次**的存档: 识别节点启动时会打印自己的 run 目录。
+  #   不指定的话会取"最新目录", 而第 8 项的强制红灯小跑会新建一个不完整的目录,
+  #   于是误判"summary.txt 没落盘"(实测踩到)。
+  RUN_DIR=$(grep -oE '/[^ ]*vision_runs/[0-9_-]+' "$VISION_LOG" 2>/dev/null | tail -1)
+  timeout 120 python3 tools/check_vision.py --log "$LOGD/check5.txt" \
+      ${RUN_DIR:+--run "$RUN_DIR"} > "$LOGD/check7.txt" 2>&1
+  if [ $? -eq 0 ]; then
+    ok "识别: $(grep -oE '识别核对: 全部通过.*' "$LOGD/check7.txt" | tail -1)"
+  else
+    bad "识别: $(grep -oE '识别核对: 不通过.*' "$LOGD/check7.txt" | tail -1)"
+  fi
+  grep -E '✗|识别核对' "$LOGD/check7.txt" | sed 's/^/      /'
+
+  # ---------------------------------------------------------- 8/8 红绿灯通行闸
+  #  (a) 巡航中: 两个灯站都必须"确认绿灯后放行", 且全程不能出现"没有确认绿灯"
+  #  (b) 强制红灯: 只跑灯站, 必须原地停车等待到超时结束, 且**不能**出现"一圈跑完"
+  hdr "8/8 红绿灯通行闸（红灯停 / 绿灯行）"
+  # ★ 注意 grep -c 找不到时会**输出 0 并返回 1**, 所以不能写 `|| echo 0`
+  #   (那样会变成 "0\n0", 后面 [ -eq ] 直接报 integer expression expected)
+  NGATE=$(grep -c '交通灯.*放行' "$LOGD/check5.txt" 2>/dev/null || :)
+  NABORT=$(grep -c '没有确认绿灯' "$LOGD/check5.txt" 2>/dev/null || :)
+  NGATE=${NGATE:-0}; NABORT=${NABORT:-0}
+  if [ "$NGATE" -ge 2 ] && [ "$NABORT" -eq 0 ]; then
+    ok "通行闸: 巡航中 2 个灯站均确认绿灯后放行（放行 $NGATE 次、误拦 0 次）"
+  else
+    bad "通行闸: 巡航中放行 $NGATE 次 / 误拦 $NABORT 次（期望 ≥2 次放行且 0 次误拦）"
+  fi
+  MINI="$LOGD/mini_light_route.yaml"
+  python3 - "$ROUTE" "$MINI" <<'PY'
+import sys, yaml
+d = yaml.safe_load(open(sys.argv[1], encoding='utf-8'))
+tl = next(w for w in d['waypoints'] if w.get('task') == 'traffic_light')
+out = dict(start=d.get('start'), return_to=d.get('return_to') or d.get('start'),
+           waypoints=[tl])
+open(sys.argv[2], 'w', encoding='utf-8').write(
+    yaml.safe_dump(out, allow_unicode=True, sort_keys=False))
+PY
+  rostopic pub -1 /traffic_light/command std_msgs/String "data: 'red'" >/dev/null 2>&1
+  sleep 2
+  timeout 180 python3 tools/patrol.py --file "$MINI" --light-max-wait 8 --light-recheck 0.5 \
+      > "$LOGD/check8.txt" 2>&1
+  rostopic pub -1 /traffic_light/command std_msgs/String "data: 'auto'" >/dev/null 2>&1
+  if grep -q '原地停车等待' "$LOGD/check8.txt" && grep -q '没有确认绿灯' "$LOGD/check8.txt" \
+      && ! grep -q '一圈跑完' "$LOGD/check8.txt"; then
+    ok "通行闸: 强制红灯时原地停车等待直至超时结束（未放行、未继续跑）"
+  else
+    bad "通行闸: 强制红灯时行为不符（见 $LOGD/check8.txt）"
+  fi
+  grep -E '交通灯' "$LOGD/check8.txt" | tail -3 | sed 's/^/      /'
+  kill $VISION_PID 2>/dev/null; wait $VISION_PID 2>/dev/null
 fi
 
 # ---------------------------------------------------------------- 汇总

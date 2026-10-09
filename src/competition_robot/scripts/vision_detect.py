@@ -355,6 +355,12 @@ class VisionDetect(object):
             req = {'point': m.data.strip()}
         point = str(req.get('point', '?')).strip()
         kind = str(req.get('kind', 'all')).strip()
+        if not point or point == '?':
+            # ★ 空请求(没有 point)直接忽略 —— 历史上 patrol 把"出汇总"的空串错发到
+            #   /vision/request, 结果被当成一次 point='' 的全类识别, 终端汇总里多出
+            #   一行 `?=...`、还多存一张图。汇总请发 /vision/summary。
+            log('[vision] 收到没有 point 的请求, 已忽略（出汇总请发 /vision/summary）')
+            return
         idx = req.get('index')
         frames = self.grab(self.a.frames)
         if not frames:
