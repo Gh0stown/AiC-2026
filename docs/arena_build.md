@@ -3,6 +3,16 @@
 > 这份文档承接原 README 的「开发过程」部分 —— README 现在是项目介绍，过程叙述与口径确认记录挪到这里。
 > 相关的坑同时记在 [`issue_log.md`](issue_log.md)。
 
+### 两张"场地图"的区别（别混用）
+
+| 图 | 是什么 | 用途 |
+|---|---|---|
+| `src/competition_arena/docs/arena_preview.png` | **从平面图提取出的矢量线条预览**（内部车道线 + 外围同色），管线中间产物 | 看"提取对不对" |
+| `src/competition_arena/docs/arena_topdown.png` | **世界俯视图**，由真值源作图（`tools/render_topdown_2d.py`）：4 面外围墙 + 17 条地面标线 + 15 个物料 | **对外/报告用这张** |
+
+> ★ 对外文档要用 `arena_topdown.png`。`arena_preview.png` 内部线条与外围同色，
+> 看图容易误以为"内部白线也建成了墙"（实际世界只有 4 面外围墙，见上）。
+
 ## 1. 提取方法
 
 原始图片 `1280×1280`，纯黑（可通行）/ 纯白（墙）二值图。

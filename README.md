@@ -4,7 +4,7 @@
 四轮麦克纳姆全向底盘 → 建图 / AMCL 定位 / move_base 导航 → 17 站固定路线巡检（含 10 个视觉识别点）
 → 三个视觉识别任务（人偶立牌 / 车牌 / 红绿灯）→ 倒车入库。
 
-![场地预览](src/competition_arena/docs/arena_preview.png)
+![场地预览](src/competition_arena/docs/arena_topdown.png)
 
 > **第一次跑 / 换机器**：先看 [`docs/wsl_setup.md`](docs/wsl_setup.md)（依赖、clone 后怎么编、WSL 注意事项）。
 > **验收**：看 [`验收指南.md`](验收指南.md)（三条命令启动，或 `./tools/acceptance.sh` 一键 6 项检查）。
