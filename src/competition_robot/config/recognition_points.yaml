@@ -94,21 +94,21 @@ points:
   task: standee
   pose:
   - -0.962
-  - 1.8571
+  - 1.8521
   - -1.5708
   yaw_deg: -90.0
   lane: A/B 街区列 / 顶车道
-  shot_distance_m: 0.5
+  shot_distance_m: 0.495
   clip_near_m: 0.05
   metric:
     unit: 立牌宽 px
-    value: 116.0
+    value: 155.0
     threshold: 40.0
-    height_px: 315.7
-    visible_frac: 0.907
-    need_pitch_deg: 1.5
+    height_px: 314.6
+    visible_frac: 0.895
+    need_pitch_deg: 1.8
   view_incidence_cos: 1.0
-  frame_margin: 0.257
+  frame_margin: 0.22
   alternatives: []
 - name: A_south
   task: standee
@@ -122,13 +122,13 @@ points:
   clip_near_m: 0.05
   metric:
     unit: 立牌宽 px
-    value: 117.2
+    value: 107.8
     threshold: 40.0
     height_px: 314.6
     visible_frac: 0.895
     need_pitch_deg: 1.8
   view_incidence_cos: 1.0
-  frame_margin: 0.414
+  frame_margin: 0.413
   alternatives: []
 - name: A_west
   task: standee
@@ -142,7 +142,7 @@ points:
   clip_near_m: 0.05
   metric:
     unit: 立牌宽 px
-    value: 116.0
+    value: 115.3
     threshold: 40.0
     height_px: 315.7
     visible_frac: 0.907
@@ -153,11 +153,11 @@ points:
   - - -1.8561
     - 1.2575
     - 0.0
-    - 117.2
+    - 116.5
   - - -1.8561
     - 1.0575
     - 0.0
-    - 117.2
+    - 116.5
 - name: B_east
   task: standee
   pose:
@@ -170,22 +170,22 @@ points:
   clip_near_m: 0.05
   metric:
     unit: 立牌宽 px
-    value: 111.6
+    value: 121.4
     threshold: 40.0
     height_px: 319.8
     visible_frac: 0.956
     need_pitch_deg: 0.7
   view_incidence_cos: 1.0
-  frame_margin: 0.756
+  frame_margin: 0.731
   alternatives:
   - - -0.0379
     - -0.27
     - -3.1416
-    - 111.6
+    - 121.4
   - - -0.0429
     - -0.07
     - -3.1416
-    - 112.6
+    - 122.6
 - name: B_north
   task: standee
   pose:
@@ -198,22 +198,22 @@ points:
   clip_near_m: 0.05
   metric:
     unit: 立牌宽 px
-    value: 104.5
+    value: 125.6
     threshold: 40.0
     height_px: 313.5
     visible_frac: 1.0
     need_pitch_deg: -0.6
   view_incidence_cos: 1.0
-  frame_margin: 0.478
+  frame_margin: 0.461
   alternatives:
   - - -0.841
     - 0.6011
     - -1.5708
-    - 104.5
+    - 125.6
   - - -1.041
     - 0.5961
     - -1.5708
-    - 105.4
+    - 126.7
 - name: car_1
   task: plate
   pose:

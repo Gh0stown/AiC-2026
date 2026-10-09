@@ -1,13 +1,29 @@
 <?xml version="1.0"?>
 <sdf version="1.7">
   <model name="standee_c01">
-    <!-- 人偶立牌: 高 0.150 m x 宽 0.050 m x 厚 0.005 m
-         尺寸来源: ~/复赛资料/人员/ (用户确认 15x5 cm) -->
+    <!-- 人偶立牌: 高 0.150 m x 宽 0.066 m x 厚 0.005 m (板面尺寸 = 人物轮廓外接框)
+         尺寸来源: ~/复赛资料/人员/ —— 官方实物是**按人物轮廓模切**的板子,
+         标称 15 x 5 cm 是外接尺寸; 各张素材的轮廓比不同 (15 cm 高时宽 3.9~7.0 cm)。
+
+         ★ 结构 (2026-10-09 改两次后的最终形态):
+           board = 尺寸正确、纯白的板材, 正面尺寸**正好等于人物外接框 -> 零留白**
+           art   = 板前再贴一层 1.2 mm 的贴图面, 只有这一层带人物图
+           col   = **碰撞体按官方 15 x 5 x 0.5 cm 的统一外接尺寸** (雷达反射面也用它)
+           为什么这么拆: ① Gazebo 的 box 六个面共用一张贴图, 直接把图贴在 5mm 厚的
+           板上 -> 侧面与顶面也印着人物 (5mm 侧面上一条压扁的人);
+           ② 若把 5cm 宽当作板面, 窄轮廓的人就会左右留白。
+           所以"可见板面 = 人物外接框 (零留白)", "碰撞/雷达 = 官方 5 cm 外接框"。
+         朝向: 人物图在 **-x** 面 (实物标定结论, 见 setup_standees.py 的 EDGE 表) -->
     <static>true</static>
     <link name="link">
       <visual name="board">
         <pose>0 0 0.0790 0 0 0</pose>
-        <geometry><box><size>0.0050 0.0500 0.1500</size></box></geometry>
+        <geometry><box><size>0.0050 0.0661 0.1500</size></box></geometry>
+        <material><ambient>0.94 0.94 0.93 1</ambient><diffuse>0.94 0.94 0.93 1</diffuse></material>
+      </visual>
+      <visual name="art">
+        <pose>-0.0031 0 0.0790 0 0 0</pose>
+        <geometry><box><size>0.0012 0.0661 0.1500</size></box></geometry>
         <material>
           <script>
             <uri>model://standee_c01/materials/scripts</uri>
@@ -16,22 +32,9 @@
           </script>
         </material>
       </visual>
-      <!-- ★ 背面挡板 (放 +x 面 = 透明的那面): Gazebo 的 box 六个面共用一张贴图,
-           实拍发现从背后看会**看穿** (-x 面渲染人物, +x 面 alpha 被丢弃)。
-           所以: 人物图在 **-x** 面 -> yaw 要让 -x 朝车道/街区外 (见 setup_standees.py
-           的 EDGE 表, 已按"整体 +180°"修正); 挡板放 **+x** 挡住背面。
-           ⚠ 这块挡板/朝向的组合是**实拍标定**出来的, 推导会推错 (来回折腾过三次)。
-             核对: 用 launch 参数把车生成在点位上抓帧 (交接文档 §4.6), 和
-             ~/复赛资料/人员/ 的原图对: 车道侧要看到人物正面
-             (c01=戴草帽拿修枝剪的园艺工, c02=抱书的眼镜男)。 -->
-      <visual name="back">
-        <pose>0.0035 0 0.0790 0 0 0</pose>
-        <geometry><box><size>0.0010 0.0520 0.1520</size></box></geometry>
-        <material><ambient>0.90 0.89 0.86 1</ambient><diffuse>0.90 0.89 0.86 1</diffuse></material>
-      </visual>
       <visual name="base">
         <pose>0 0 0.0020 0 0 0</pose>
-        <geometry><box><size>0.0450 0.0500 0.0040</size></box></geometry>
+        <geometry><box><size>0.0450 0.0661 0.0040</size></box></geometry>
         <material><ambient>0.92 0.92 0.92 1</ambient><diffuse>0.92 0.92 0.92 1</diffuse></material>
       </visual>
       <collision name="col">
@@ -40,7 +43,7 @@
       </collision>
       <collision name="base_c">
         <pose>0 0 0.0020 0 0 0</pose>
-        <geometry><box><size>0.0450 0.0500 0.0040</size></box></geometry>
+        <geometry><box><size>0.0450 0.0661 0.0040</size></box></geometry>
       </collision>
     </link>
   </model>

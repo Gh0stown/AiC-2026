@@ -40,8 +40,11 @@ SRC = os.path.expanduser('~/复赛资料/人员')
 CFG = os.path.join(PKG, 'config', 'standees.yaml')
 
 STANDEE_H = 0.150      # 立牌高 15 cm (官方)
-BOARD_W = 0.050        # 立牌宽 5 cm (官方, 统一尺寸)
 THICK = 0.005          # 厚 5 mm (官方)
+# 官方"宽 5 cm"是**外接尺寸** (实物按人物轮廓模切, 各图轮廓比不同)。
+#   * 可见板面 = 人物外接框 (零留白, 和实物一致)
+#   * 碰撞体 / 雷达反射面 = 官方统一 15 x 5 x 0.5 cm
+OFFICIAL_W, OFFICIAL_H = 0.050, 0.150
 BASE_H = 0.004         # 底座厚 4 mm (实物立牌下面有个折起来的支撑)
 BASE_X = 0.045         # 底座前后伸出 (防止前后倒)
 
@@ -128,11 +131,9 @@ def write_model(name, src_png, size_m, mat_name):
     bb = art.split()[-1].getbbox()
     if bb:
         art = art.crop(bb)
-    cw = int(round(w / h * 600.0)); ch = 600
-    k = min(cw / float(art.width), ch / float(art.height))
-    if k < 1.0:
-        art = art.resize((max(1, int(art.width * k)), max(1, int(art.height * k))),
-                         Image.LANCZOS)
+    # 画布比例与人物比例一致 -> 贴图正好铺满板面, 四周零留白
+    cw = max(2, int(round(w / h * 600.0))); ch = 600
+    art = art.resize((cw, ch), Image.LANCZOS)
     canvas = Image.new('RGBA', (cw, ch), (0, 0, 0, 0))
     canvas.paste(art, ((cw - art.width) // 2, ch - art.height), art)   # 脚踩板底
     canvas.save(os.path.join(tex_d, '%s.png' % name))
@@ -170,13 +171,29 @@ material %s
     sdf = '''<?xml version="1.0"?>
 <sdf version="1.7">
   <model name="{name}">
-    <!-- 人偶立牌: 高 {h:.3f} m x 宽 {w:.3f} m x 厚 {t:.3f} m
-         尺寸来源: ~/复赛资料/人员/ (用户确认 15x5 cm) -->
+    <!-- 人偶立牌: 高 {h:.3f} m x 宽 {w:.3f} m x 厚 {t:.3f} m (板面尺寸 = 人物轮廓外接框)
+         尺寸来源: ~/复赛资料/人员/ —— 官方实物是**按人物轮廓模切**的板子,
+         标称 15 x 5 cm 是外接尺寸; 各张素材的轮廓比不同 (15 cm 高时宽 3.9~7.0 cm)。
+
+         ★ 结构 (2026-10-09 改两次后的最终形态):
+           board = 尺寸正确、纯白的板材, 正面尺寸**正好等于人物外接框 -> 零留白**
+           art   = 板前再贴一层 1.2 mm 的贴图面, 只有这一层带人物图
+           col   = **碰撞体按官方 15 x 5 x 0.5 cm 的统一外接尺寸** (雷达反射面也用它)
+           为什么这么拆: ① Gazebo 的 box 六个面共用一张贴图, 直接把图贴在 5mm 厚的
+           板上 -> 侧面与顶面也印着人物 (5mm 侧面上一条压扁的人);
+           ② 若把 5cm 宽当作板面, 窄轮廓的人就会左右留白。
+           所以"可见板面 = 人物外接框 (零留白)", "碰撞/雷达 = 官方 5 cm 外接框"。
+         朝向: 人物图在 **-x** 面 (实物标定结论, 见 setup_standees.py 的 EDGE 表) -->
     <static>true</static>
     <link name="link">
       <visual name="board">
         <pose>0 0 {zb:.4f} 0 0 0</pose>
         <geometry><box><size>{t:.4f} {w:.4f} {h:.4f}</size></box></geometry>
+        <material><ambient>0.94 0.94 0.93 1</ambient><diffuse>0.94 0.94 0.93 1</diffuse></material>
+      </visual>
+      <visual name="art">
+        <pose>{xa:.4f} 0 {zb:.4f} 0 0 0</pose>
+        <geometry><box><size>0.0012 {w:.4f} {h:.4f}</size></box></geometry>
         <material>
           <script>
             <uri>model://{name}/materials/scripts</uri>
@@ -185,19 +202,6 @@ material %s
           </script>
         </material>
       </visual>
-      <!-- ★ 背面挡板 (放 +x 面 = 透明的那面): Gazebo 的 box 六个面共用一张贴图,
-           实拍发现从背后看会**看穿** (-x 面渲染人物, +x 面 alpha 被丢弃)。
-           所以: 人物图在 **-x** 面 -> yaw 要让 -x 朝车道/街区外 (见 setup_standees.py
-           的 EDGE 表, 已按"整体 +180°"修正); 挡板放 **+x** 挡住背面。
-           ⚠ 这块挡板/朝向的组合是**实拍标定**出来的, 推导会推错 (来回折腾过三次)。
-             核对: 用 launch 参数把车生成在点位上抓帧 (交接文档 §4.6), 和
-             ~/复赛资料/人员/ 的原图对: 车道侧要看到人物正面
-             (c01=戴草帽拿修枝剪的园艺工, c02=抱书的眼镜男)。 -->
-      <visual name="back">
-        <pose>{xb:.4f} 0 {zb:.4f} 0 0 0</pose>
-        <geometry><box><size>0.0010 {wb:.4f} {hb:.4f}</size></box></geometry>
-        <material><ambient>0.90 0.89 0.86 1</ambient><diffuse>0.90 0.89 0.86 1</diffuse></material>
-      </visual>
       <visual name="base">
         <pose>0 0 {zbh:.4f} 0 0 0</pose>
         <geometry><box><size>{bx:.4f} {w:.4f} {bh:.4f}</size></box></geometry>
@@ -205,7 +209,7 @@ material %s
       </visual>
       <collision name="col">
         <pose>0 0 {zb:.4f} 0 0 0</pose>
-        <geometry><box><size>{t:.4f} {w:.4f} {h:.4f}</size></box></geometry>
+        <geometry><box><size>{t:.4f} {cw:.4f} {ch:.4f}</size></box></geometry>
       </collision>
       <collision name="base_c">
         <pose>0 0 {zbh:.4f} 0 0 0</pose>
@@ -216,9 +220,10 @@ material %s
 </sdf>
 '''.format(name=name, h=h, w=w, t=THICK, zb=z_board, mat=mat_name,
            bx=BASE_X, bh=BASE_H, zbh=BASE_H / 2.0,
-           # 背面挡板: 贴板背面 (板厚 t, 面在 +-t/2), 往外让 0.5mm 防 z-fighting,
-           # 并比板略大 2mm, 保证从背后看完全遮住贴图
-           xb=(THICK / 2.0 + 0.0010), wb=w + 0.002, hb=h + 0.002)
+           # 贴图面贴在板前 -x 侧, 让 0.6mm 防 z-fighting
+           xa=-(THICK / 2.0 + 0.0012 / 2.0),
+           # 碰撞体: 官方统一外接尺寸 15 x 5 x 0.5 cm
+           cw=OFFICIAL_W, ch=OFFICIAL_H)
     with open(os.path.join(d, 'model.sdf'), 'w') as f:
         f.write(sdf)
     with open(os.path.join(d, 'model.config'), 'w') as f:
@@ -232,8 +237,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--height', type=float, default=STANDEE_H, help='立牌高 (m), 默认 0.15')
     ap.add_argument('--list', action='store_true', help='只打印清单')
-    ap.add_argument('--aspect', action='store_true',
-                    help='旧行为: 宽度按各图长宽比 (默认统一 5 cm 宽, 官方尺寸)')
+    ap.add_argument('--uniform-w', action='store_true',
+                    help='把板面统一成 5 cm 宽 (会在窄轮廓的人两侧留白; 默认按轮廓)')
     a = ap.parse_args()
 
     if not os.path.isdir(SRC):
@@ -254,7 +259,7 @@ def main():
         h = a.height
         # ★ 官方统一尺寸: 高 15 cm、宽 5 cm。素材各图轮廓比不同 (15cm 高时 39~70 mm),
         #   所以板面一律 5x15, 人物按 contain 居中放进去 (四边留透明) —— 见 write_model。
-        w = BOARD_W if not a.aspect else h * pw / float(ph)
+        w = OFFICIAL_W if a.uniform_w else h * pw / float(ph)   # 默认: 人物外接框
         mat = 'Standee/%s' % name.replace('standee_', '')
         print('%-14s %-10s %-16s %-12s %.3f x %.3f'
               % (name, '社区' if cat == 'community' else '非社区', orig,
@@ -273,11 +278,11 @@ def main():
             f.write('# 人偶立牌清单 (唯一真值源) —— 由 tools/gen_standees.py 生成\n'
                     '#\n'
                     '# 素材: ~/复赛资料/人员/  (社区人员 1~16, 非社区人员 F1/F2)\n'
-                    '# 尺寸: 高 %.3f m x 宽 %.3f m x 厚 5 mm (官方统一尺寸; 人物按 contain 居中)\n'
+                    '# 尺寸: 高 %.3f m, 板面宽按人物轮廓 (零留白); 碰撞体 = 官方 15x5x0.5 cm\n'
                     '#\n'
                     '# 摆放: 用 tools/setup_standees.py 按下面的 blocks 计划生成 <include>\n'
                     '#   朝向: 模型板面朝 +x -> yaw 决定面向 (北=+y 90, 南=-y -90, 东=+x 0, 西=-x 180)\n\n'
-                    % (h, BOARD_W))
+                    % h)
             # ★ inset_m: 立牌从街区边线往内缩多少。改成 0.20 (原来 0.032) 的原因:
             #   识别是"开到点位正对着拍", 相机只有 0.20m 高且无俯仰, 站得越近切得越多:
             #   拍摄距离 d -> 可见高度 ≈ 0.366*d - 0.046。往里挪 0.20m 后 d 从
