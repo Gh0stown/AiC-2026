@@ -13,7 +13,7 @@
 |---|---|---|---|---|
 | 人偶立牌 | `standee_yolo11n.pt` | **`person_strengthen`** | `datasets/detect/ring_20260925_102721` | `comm` / `non_comm` |
 | 车牌 | `plate_yolo11n.pt` | **`plate_final`** | `datasets/detect/plate_20260923_205130` | `plate` |
-| 红绿灯 | `traffic_light_yolo11n.pt` | **`traffic_light_final`** | `datasets/detect/light_20260923_200325` | `red` / `yellow` / `green_light` |
+| 红绿灯 | `traffic_light_yolo11n.pt` | **`traffic_light_final2`**（2026-10-09 换）| `datasets/detect/light_20261009_224439` | `red_light` / `yellow_light` / `green_light` |
 
 > 训练在 Windows 侧用 X-AnyLabeling 的 ultralytics 训练入口完成（YOLO11n、`imgsz=640`），
 > run 目录：`<xanylabeling_data>/trainer/ultralytics/runs/detect/<run>/`。
@@ -25,7 +25,8 @@
 |---|---|---|---|---|
 | 人偶立牌 | `person_strengthen` | 300（实际 163 停） | **0.990 / 0.990 / 0.990 / 0.913** | 标注数据 **P 92.5% / R 98.7%** |
 | 车牌 | `plate_final` | 200（实际 64 停） | **0.997 / 1.000 / 0.995 / 0.820** | 自采 105/105；独立数据 87% |
-| 红绿灯 | `traffic_light_final` | 100（跑满） | **0.987 / 1.000 / 0.995 / 0.882** | 自采 90/90（与训练集同源，非泛化）；竞技场 63% |
+| 红绿灯 | `traffic_light_final2`（2026-10-09）| 151（早停）| **0.986 / 1.000 / 0.995 / 0.918** | 原始全帧 178 张（有亮灯真值）：**检出 100%、亮灯颜色 98.9%** |
+| 红绿灯 | `traffic_light_final`（旧，已换下）| 100（跑满）| 0.987 / 1.000 / 0.995 / 0.882 | 同 178 张：检出/颜色仅 **70.8%** |
 
 > ⚠️ **两个口径不能混着写。** `results.csv` 里的是 Ultralytics 在 best-F1 点上的
 > P/R；对外常引用的 92.5% / 98.7% 是**部署阈值**下的评估。报告里两种都写、并标明口径。
@@ -63,3 +64,16 @@ val 指标奖励的是"把现有标签学准"，而实场失效模式（背板�
 
 `*_yolo11n.onnx` 是同一份权重的 ONNX 导出（供不装 torch 的机器推理）。
 节点默认用 `.pt`（CPU 推理），换 `.onnx` 见 `docs/vision_run.md`。
+
+## 换型说明（2026-10-09：红绿灯）
+
+外观定稿后（灯罩改用官方 6 张照片材质），旧 `traffic_light_final` 直接失效：
+在新外观的 val 上 mAP50 从 0.995 掉到 **0.356**，原始全帧 178 张上"检出+颜色"只有
+**70.8%** —— 这就是验收里"灯站通行闸时好时坏"的原因。
+
+新 `traffic_light_final2`（yolo11n，151 轮早停）在**同一批原始全帧**上：
+检出 **100%**、亮灯颜色 **98.9%**（绿 56/56、红 49/51、黄 71/71）；
+距离 1.2~2.0 m 段颜色 100%，<1.2 m 段 93.5%（太近灯珠出画，属正常）。
+旧权重留在 `traffic_light_yolo11n.pt.bak_20260923` 作对照。
+训练数据：`datasets/detect/light_20261009_224439`（3 类，train/val 划分）；
+日志：`train_logs/traffic_light_final2/`。
