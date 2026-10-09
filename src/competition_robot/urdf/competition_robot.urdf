@@ -4,7 +4,7 @@
   改参数请编辑 config/robot_params.yaml, 然后重新运行:
       python3 scripts/gen_robot.py
 
-  生成时间   : 2026-10-09 18:51:11
+  生成时间   : 2026-10-09 19:10:25
   底盘构型   : 四轮麦克纳姆 (X 型布局)
   轮径/轮宽  : 0.0485 / 0.0506 m
   轴距/轮距  : 0.2070 / 0.2908 m
@@ -78,9 +78,19 @@
       <geometry><box size="0.002 0.100 0.028"/></geometry>
       <material name="label"/>
     </visual>
-    <visual name="cam_post">
-      <origin xyz="0.1491 0 0.1575" rpy="0 0 0"/>
-      <geometry><box size="0.020 0.020 0.085"/></geometry>
+    <visual name="cam_mast">
+      <origin xyz="-0.1250 0 0.1725" rpy="0 0 0"/>
+      <geometry><box size="0.010 0.010 0.115"/></geometry>
+      <material name="frame"/>
+    </visual>
+    <visual name="cam_arm">
+      <origin xyz="0.0120 0 0.2265" rpy="0 0 0"/>
+      <geometry><box size="0.285 0.012 0.005"/></geometry>
+      <material name="frame"/>
+    </visual>
+    <visual name="cam_drop">
+      <origin xyz="0.1490 0 0.2220" rpy="0 0 0"/>
+      <geometry><box size="0.010 0.010 0.014"/></geometry>
       <material name="frame"/>
     </visual>
     <collision>
