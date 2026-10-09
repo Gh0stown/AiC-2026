@@ -37,7 +37,19 @@ WS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CFG = os.path.join(WS, 'src', 'competition_arena', 'config', 'traffic_lights.yaml')
 JOINTS = ['j_red', 'j_yellow', 'j_green']
 IDX = {'red': 0, 'yellow': 1, 'green': 2}
-ON, OFF = 0.050, 0.010
+def _tl_geom():
+    import yaml as _y, os as _o
+    for p in (_o.path.join(_o.path.dirname(_o.path.abspath(__file__)), '..', 'config',
+                           'traffic_lights.yaml'),
+              _o.path.join(_o.path.dirname(_o.path.abspath(__file__)), '..', '..',
+                           'src', 'competition_arena', 'config', 'traffic_lights.yaml')):
+        if _o.path.isfile(p):
+            return (_y.safe_load(open(p, encoding='utf-8')).get('geometry') or {})
+    return {}
+
+
+_G = _tl_geom()
+ON, OFF = float(_G.get('lamp_on', 0.0305)), float(_G.get('lamp_off', 0.0100))   # 唯真值源见 traffic_lights.yaml
 COLORS = ('red', 'yellow', 'green')
 
 

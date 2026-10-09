@@ -1,0 +1,60 @@
+// 自动生成 (tools/setup_traffic_lights.py) —— 用官方照片做灯罩材质
+//   *_off = 官方的"灭"照片 -> 贴在常驻透镜上 (灭灯时看到的就是它)
+//   *_on  = 官方的"亮"照片 -> 贴在发光灯珠上 (伸出时遮住透镜, 就是亮灯)
+
+material LightLens/red_off
+{
+  technique { pass {
+    ambient 0.55 0.55 0.55 1
+    diffuse 0.95 0.95 0.95 1
+    specular 0.05 0.05 0.05 1 4
+    texture_unit { texture lens_red_off.png filtering anisotropic max_anisotropy 8 }
+  } }
+}
+material LightLamp/red_on
+{
+  technique { pass {
+    ambient 1 1 1 1
+    diffuse 1 1 1 1
+    emissive 0.55 0.55 0.55 1
+    texture_unit { texture lens_red_on.png filtering anisotropic max_anisotropy 8 }
+  } }
+}
+
+material LightLens/yellow_off
+{
+  technique { pass {
+    ambient 0.55 0.55 0.55 1
+    diffuse 0.95 0.95 0.95 1
+    specular 0.05 0.05 0.05 1 4
+    texture_unit { texture lens_yellow_off.png filtering anisotropic max_anisotropy 8 }
+  } }
+}
+material LightLamp/yellow_on
+{
+  technique { pass {
+    ambient 1 1 1 1
+    diffuse 1 1 1 1
+    emissive 0.55 0.55 0.55 1
+    texture_unit { texture lens_yellow_on.png filtering anisotropic max_anisotropy 8 }
+  } }
+}
+
+material LightLens/green_off
+{
+  technique { pass {
+    ambient 0.55 0.55 0.55 1
+    diffuse 0.95 0.95 0.95 1
+    specular 0.05 0.05 0.05 1 4
+    texture_unit { texture lens_green_off.png filtering anisotropic max_anisotropy 8 }
+  } }
+}
+material LightLamp/green_on
+{
+  technique { pass {
+    ambient 1 1 1 1
+    diffuse 1 1 1 1
+    emissive 0.55 0.55 0.55 1
+    texture_unit { texture lens_green_on.png filtering anisotropic max_anisotropy 8 }
+  } }
+}

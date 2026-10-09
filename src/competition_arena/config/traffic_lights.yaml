@@ -34,6 +34,24 @@
 #
 # 场地外扩 (build_arena.py --margin 0.10) 仍然保留: 上灯灯箱会伸到白线外 2.3cm,
 # 围墙退到白线外 0.10m 后就不会和灯箱打架; 也给以后的人偶/车牌等物料留了余量。
+# ★ 几何与灯珠行程 (唯真值源): 模型生成 (tools/setup_traffic_lights.py)、
+#   切换节点 (scripts/traffic_light.py)、验证脚本 (tools/verify_traffic_light.py)
+#   三处都从这里读, 避免"改了箱体厚度忘了改行程"。
+#   ★ 键名不能叫 on/off —— YAML 1.1 会把它们解析成布尔值 (踩过)。
+#   2026-10-09: 箱体厚度 8 -> 5 cm (官方) 后, 灯珠原来还推到 0.050 (前面 2.5 cm)
+#   -> 视觉上**悬空**; 现在按"灯珠后表面正好贴住常驻透镜前表面"算 on。
+geometry:
+  housing_w: 0.640      # 灯箱宽 (官方 64 cm)
+  housing_h: 0.140      # 灯箱高 (官方 14 cm)
+  housing_d: 0.050      # 灯箱厚 (官方 5 cm)
+  housing_z: 0.340      # 灯箱下沿离地 (官方 34 cm)
+  post_w: 0.025         # 支架 2.5 x 2.5 cm
+  lens_r: 0.0425        # 灯罩/灯珠半径 (官方尺寸图量得, 直径 8.5 cm)
+  lens_t: 0.006         # 常驻暗透镜厚
+  lamp_t: 0.004         # 发光灯珠厚
+  lamp_on: 0.0305        # 亮: 灯珠推进到透镜前 (后表面贴住透镜前表面)
+  lamp_off: 0.0100       # 灭: 缩回箱体内部 (被不透光灯箱挡住)
+
 lights:
 
   - {name: tl_top, model: traffic_light_h, layout: horizontal, posts: double,

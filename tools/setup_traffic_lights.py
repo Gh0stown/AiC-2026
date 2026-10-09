@@ -54,7 +54,12 @@ LAMP_R, LAMP_T = 0.0425, 0.008                       # 发光灯珠   半径/厚
 LAMP_PITCH = 0.22                                    # 灯珠中心间距
 POST_W = 0.025                                       # 支架方柱边长
 # 关节位置: 亮 = 推到透镜前方(露出来); 灭 = 缩回灯箱内部(被不透光灯箱挡住)
-ON, OFF = 0.050, 0.010
+# 几何与行程从 config/traffic_lights.yaml 的 geometry 段读 (唯真值源)
+_CFG_TL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                       'src', 'competition_arena', 'config', 'traffic_lights.yaml')
+_G = (yaml.safe_load(open(_CFG_TL, encoding='utf-8')).get('geometry') or {})
+ON = float(_G.get('lamp_on', 0.0305))
+OFF = float(_G.get('lamp_off', 0.0100))
 
 DARK = {'red':    (0.467, 0.106, 0.122),
         'yellow': (0.588, 0.357, 0.094),
@@ -174,9 +179,10 @@ def model_sdf(name, layout, posts='double'):
     for c, (ox, oy, oz) in off.items():
         o.append('      <visual name="lens_%s"><pose>%.4f %.3f %.3f 0 1.5708 0</pose>'
                  '<geometry><cylinder><radius>%.4f</radius><length>%.4f</length></cylinder>'
-                 '</geometry><material><ambient>%s</ambient><diffuse>%s</diffuse>'
-                 '</material></visual>'
-                 % (c, fx, oy, oz, LENS_R, LENS_T, rgba(DARK[c]), rgba(DARK[c])))
+                 '</geometry><material><script><uri>model://traffic_light_h/materials/scripts'
+                 '</uri><uri>model://traffic_light_h/materials/textures</uri>'
+                 '<name>LightLens/%s_off</name></script></material></visual>'
+                 % (c, fx, oy, oz, LENS_R, LENS_T, c))
     o.append('    </link>')
 
     # ---- 三颗发光灯珠 (挂在滑动关节上) ----
@@ -187,10 +193,10 @@ def model_sdf(name, layout, posts='double'):
                  '<iyy>1e-5</iyy><iyz>0</iyz><izz>1e-5</izz></inertia></inertial>'
                  '<visual name="lamp"><pose>0 0 0 0 1.5708 0</pose><geometry><cylinder>'
                  '<radius>%.4f</radius><length>%.4f</length></cylinder></geometry><material>'
-                 '<ambient>%s</ambient><diffuse>%s</diffuse><emissive>%s</emissive>'
-                 '</material></visual></link>'
-                 % (c, ox, oy, oz, LAMP_R, LAMP_T,
-                    rgba(LIT[c]), rgba(LIT[c]), rgba(LIT[c])))
+                 '<script><uri>model://traffic_light_h/materials/scripts</uri>'
+                 '<uri>model://traffic_light_h/materials/textures</uri>'
+                 '<name>LightLamp/%s_on</name></script></material></visual></link>'
+                 % (c, ox, oy, oz, LAMP_R, LAMP_T, c))
         o.append('    <joint name="j_%s" type="prismatic"><parent>base</parent>'
                  '<child>lamp_%s</child><pose>0 0 0 0 0 0</pose><axis><xyz>1 0 0</xyz>'
                  '<limit><lower>%.3f</lower><upper>%.3f</upper><effort>1</effort>'

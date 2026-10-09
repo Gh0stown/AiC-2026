@@ -51,7 +51,19 @@ BOX_H = 0.140          # 灯箱高 (官方 14 cm)
 #           灭 = 缩回灯箱内部(被不透光灯箱挡住)
 # 行程刻意做得很小(4cm), 所以从画面上看"灯珠并没有明显伸缩" —— 只是亮/暗与
 # 颜色变化, 接近真实红绿灯。这也是为了不让识别模型学到"位置"这种伪特征。
-ON, OFF = 0.050, 0.010
+def _tl_geom():
+    import yaml as _y, os as _o
+    for p in (_o.path.join(_o.path.dirname(_o.path.abspath(__file__)), '..', 'config',
+                           'traffic_lights.yaml'),
+              _o.path.join(_o.path.dirname(_o.path.abspath(__file__)), '..', '..',
+                           'src', 'competition_arena', 'config', 'traffic_lights.yaml')):
+        if _o.path.isfile(p):
+            return (_y.safe_load(open(p, encoding='utf-8')).get('geometry') or {})
+    return {}
+
+
+_G = _tl_geom()
+ON, OFF = float(_G.get('lamp_on', 0.0305)), float(_G.get('lamp_off', 0.0100))   # 唯真值源见 traffic_lights.yaml
 
 
 class Node(object):
