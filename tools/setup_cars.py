@@ -225,11 +225,13 @@ def gen_plate(rng):
 
 
 def render_plate(text, out_png, size=PLATE_PX):
-    """按官方样式画车牌: 白边 + 蓝底 + 白字 (省简称 + 字母 + 圆点 + 5 位)。
+    """按官方样式画车牌: 白边 + 官方蓝底 + 白字 (省简称 + 字母 + 圆点 + 5 位)。
 
-    ★ 排版必须"按字宽排 + 自动缩放": 官方 200x81 px 里要放下 7 个字符 +
-      一个分隔圆点。第一版用固定字距, 结果字体过大、后面几个字被排到板子外面
-      被裁掉 (实测)。这里先用等宽测量再决定字号, 保证总宽 <= 可用宽度。
+    ★ 官方号牌用的是**窄体**字体: 字高约占板高 50%, 但字宽只有字高的 0.5 左右,
+      所以 7 个字 + 一个圆点能挤进 200 px。系统字体 (雅黑/黑体) 偏宽, 直接排会超宽
+      (第一版固定字距 -> 排到板外被裁; 第二版按字宽自动缩小 -> 字又太小)。
+      这里改成: 按 0.50*板高 正常画到透明层, 再**横向压缩**到可用宽度 —— 字高保持
+      与官方一致, 字宽变窄, 观感与官方窄体号牌一致。
     """
     from PIL import Image, ImageDraw, ImageFont
     W, H = size
@@ -239,7 +241,8 @@ def render_plate(text, out_png, size=PLATE_PX):
                 fill=PLATE_BG)
 
     def font(px):
-        for fp in ('/mnt/c/Windows/Fonts/msyhbd.ttc', '/mnt/c/Windows/Fonts/simhei.ttf',
+        for fp in ('/mnt/c/Windows/Fonts/msyhbd.ttc', '/usr/share/fonts/truetype/simhei/simhei.ttf',
+                   '/mnt/c/Windows/Fonts/simhei.ttf',
                    '/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf'):
             if os.path.isfile(fp):
                 try:
@@ -249,23 +252,29 @@ def render_plate(text, out_png, size=PLATE_PX):
         return ImageFont.load_default()
 
     head, serial = text.split('·')
-    glyphs = list(head) + ['·'] + list(serial)          # 省 + 字母 + · + 5 位 = 8 个
-    avail = W - 2 * PLATE_BORDER - 10                   # 可用宽度
-    gap = 2
-    dot_w = 8
-    for px in (int(H * 0.56), int(H * 0.5), int(H * 0.46)):
-        f = font(px)
-        widths = [dot_w if g == '·' else d.textlength(g, font=f) for g in glyphs]
-        total = sum(widths) + gap * (len(glyphs) - 1)
-        if total <= avail:
-            break
-    x = (W - total) / 2.0                               # 水平居中
+    glyphs = list(head) + ['·'] + list(serial)           # 省 + 字母 + · + 5 位
+    f = font(int(H * 0.50))
+    meas = ImageDraw.Draw(Image.new('RGB', (10, 10)))
+    gap = max(2, int(H * 0.04))
+    dot_w = max(6, int(H * 0.08))
+    widths = [dot_w if g == '·' else meas.textlength(g, font=f) for g in glyphs]
+    raw_w = int(sum(widths) + gap * (len(glyphs) - 1))
+
+    layer = Image.new('RGBA', (raw_w, H), (0, 0, 0, 0))
+    ld = ImageDraw.Draw(layer)
+    x = 0.0
     for g, w in zip(glyphs, widths):
         if g == '·':
-            d.ellipse([x + (w - 6) / 2, H / 2 - 3, x + (w + 6) / 2, H / 2 + 4], fill=PLATE_FG)
+            ld.ellipse([x + (w - dot_w) / 2, H / 2 - dot_w / 2 + 1,
+                        x + (w + dot_w) / 2, H / 2 + dot_w / 2 + 1], fill=PLATE_FG + (255,))
         else:
-            d.text((x + w / 2, H / 2), g, font=f, fill=PLATE_FG, anchor='mm')
+            ld.text((x + w / 2, H / 2), g, font=f, fill=PLATE_FG + (255,), anchor='mm')
         x += w + gap
+
+    avail = W - 2 * PLATE_BORDER - 16                    # 两侧各留 8px
+    if raw_w > avail:                                    # 横向压缩 (只压宽, 不压高)
+        layer = layer.resize((avail, H), Image.LANCZOS)
+    im.paste(layer, ((W - layer.width) // 2, 0), layer)
     im.save(out_png)
     return out_png
 
