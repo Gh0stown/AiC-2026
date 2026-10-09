@@ -29,7 +29,7 @@ waypoints:
   task: standee
   shot:
     metric: 立牌宽 px
-    value: 153.1
+    value: 116.0
     threshold: 40.0
 - name: 03_top_l
   world:
@@ -44,7 +44,7 @@ waypoints:
   task: standee
   shot:
     metric: 立牌宽 px
-    value: 115.1
+    value: 116.0
     threshold: 40.0
 - name: 05_mid_l
   world:
@@ -54,22 +54,22 @@ waypoints:
 - name: 06_A_south
   world:
   - -0.962
-  - 0.4579
+  - 0.4629
   yaw: 1.5708
   task: standee
   shot:
     metric: 立牌宽 px
-    value: 162.6
+    value: 117.2
     threshold: 40.0
 - name: 07_B_north
   world:
   - -0.941
-  - 0.5961
+  - 0.6011
   yaw: -1.5708
   task: standee
   shot:
     metric: 立牌宽 px
-    value: 96.8
+    value: 104.5
     threshold: 40.0
 - name: 08_mid_cl
   world:
@@ -89,7 +89,7 @@ waypoints:
   task: standee
   shot:
     metric: 立牌宽 px
-    value: 123.1
+    value: 111.6
     threshold: 40.0
 - name: 11_tl_bot
   world:

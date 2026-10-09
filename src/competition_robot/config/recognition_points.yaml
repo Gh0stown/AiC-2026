@@ -102,50 +102,34 @@ points:
   clip_near_m: 0.05
   metric:
     unit: 立牌宽 px
-    value: 153.1
+    value: 116.0
     threshold: 40.0
-    height_px: 315.9
-    visible_frac: 0.909
+    height_px: 315.7
+    visible_frac: 0.907
     need_pitch_deg: 1.5
   view_incidence_cos: 1.0
-  frame_margin: 0.718
-  alternatives:
-  - - -0.862
-    - 1.8521
-    - -1.5708
-    - 154.6
-  - - -1.062
-    - 1.8521
-    - -1.5708
-    - 154.6
+  frame_margin: 0.257
+  alternatives: []
 - name: A_south
   task: standee
   pose:
   - -0.962
-  - 0.4579
+  - 0.4629
   - 1.5708
   yaw_deg: 90.0
   lane: A/B 街区列 / 中车道
-  shot_distance_m: 0.5
+  shot_distance_m: 0.495
   clip_near_m: 0.05
   metric:
     unit: 立牌宽 px
-    value: 162.6
+    value: 117.2
     threshold: 40.0
-    height_px: 315.9
-    visible_frac: 0.909
-    need_pitch_deg: 1.5
+    height_px: 314.6
+    visible_frac: 0.895
+    need_pitch_deg: 1.8
   view_incidence_cos: 1.0
-  frame_margin: 0.71
-  alternatives:
-  - - -1.062
-    - 0.4629
-    - 1.5708
-    - 164.2
-  - - -0.862
-    - 0.4629
-    - 1.5708
-    - 164.2
+  frame_margin: 0.414
+  alternatives: []
 - name: A_west
   task: standee
   pose:
@@ -158,10 +142,10 @@ points:
   clip_near_m: 0.05
   metric:
     unit: 立牌宽 px
-    value: 115.1
+    value: 116.0
     threshold: 40.0
-    height_px: 315.9
-    visible_frac: 0.909
+    height_px: 315.7
+    visible_frac: 0.907
     need_pitch_deg: 1.5
   view_incidence_cos: 1.0
   frame_margin: 0.778
@@ -169,11 +153,11 @@ points:
   - - -1.8561
     - 1.2575
     - 0.0
-    - 116.3
+    - 117.2
   - - -1.8561
     - 1.0575
     - 0.0
-    - 116.3
+    - 117.2
 - name: B_east
   task: standee
   pose:
@@ -186,50 +170,50 @@ points:
   clip_near_m: 0.05
   metric:
     unit: 立牌宽 px
-    value: 123.1
+    value: 111.6
     threshold: 40.0
-    height_px: 320.0
-    visible_frac: 0.958
+    height_px: 319.8
+    visible_frac: 0.956
     need_pitch_deg: 0.7
   view_incidence_cos: 1.0
-  frame_margin: 0.732
+  frame_margin: 0.756
   alternatives:
   - - -0.0379
     - -0.27
     - -3.1416
-    - 123.1
+    - 111.6
   - - -0.0429
     - -0.07
     - -3.1416
-    - 124.3
+    - 112.6
 - name: B_north
   task: standee
   pose:
   - -0.941
-  - 0.5961
+  - 0.6011
   - -1.5708
   yaw_deg: -90.0
   lane: A/B 街区列 / 中车道
-  shot_distance_m: 0.55
+  shot_distance_m: 0.555
   clip_near_m: 0.05
   metric:
     unit: 立牌宽 px
-    value: 96.8
+    value: 104.5
     threshold: 40.0
-    height_px: 315.7
+    height_px: 313.5
     visible_frac: 1.0
-    need_pitch_deg: -0.5
+    need_pitch_deg: -0.6
   view_incidence_cos: 1.0
-  frame_margin: 0.626
+  frame_margin: 0.478
   alternatives:
   - - -0.841
     - 0.6011
     - -1.5708
-    - 96.0
+    - 104.5
   - - -1.041
-    - 0.6011
+    - 0.5961
     - -1.5708
-    - 96.0
+    - 105.4
 - name: car_1
   task: plate
   pose:

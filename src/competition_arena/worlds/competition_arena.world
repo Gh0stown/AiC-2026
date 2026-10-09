@@ -123,19 +123,7 @@
       </link>
     </model>
 
-                    <!-- ===== 临时红绿灯 (tools/setup_traffic_lights.py 生成) ===== -->
-    <include>
-      <uri>model://traffic_light_h</uri>
-      <name>tl_top</name>
-      <pose>-0.5060 1.7790 0.0020 0 0 0.0000</pose>
-    </include>
-    <include>
-      <uri>model://traffic_light_h</uri>
-      <name>tl_bot</name>
-      <pose>-0.1100 -1.2800 0.0020 0 0 1.5708</pose>
-    </include>
-    <!-- ===== 红绿灯结束 ===== -->
-                <!-- ===== 车辆+车牌 (tools/setup_cars.py 生成) ===== -->
+                                <!-- ===== 车辆+车牌 (tools/setup_cars.py 生成) ===== -->
     <include>
       <uri>model://car_1</uri>
       <name>car_1_p</name>
@@ -152,26 +140,63 @@
       <pose>2.0560 -1.7620 0 0 0 3.1416</pose>
     </include>
     <!-- ===== 车辆+车牌结束 ===== -->
-                                                      <!-- ===== 人物立牌 (tools/setup_standees.py 生成) ===== -->
+                                                          <!-- ===== 临时红绿灯 (tools/setup_traffic_lights.py 生成) ===== -->
+    <include>
+      <uri>model://traffic_light_h</uri>
+      <name>tl_top</name>
+      <pose>-0.5060 1.7790 0.0020 0 0 0.0000</pose>
+    </include>
+    <include>
+      <uri>model://traffic_light_h</uri>
+      <name>tl_bot</name>
+      <pose>-0.1100 -1.2800 0.0020 0 0 1.5708</pose>
+    </include>
+    <!-- ===== 红绿灯结束 ===== -->
+          <!-- ===== 人物立牌 (tools/setup_standees.py 生成) ===== -->
     <include>
       <uri>model://standee_c01</uri>
       <name>A_north_1</name>
-      <pose>-1.0070 1.2080 0 0 0 -1.5708</pose>
+      <pose>-1.1420 1.2080 0 0 0 -1.5708</pose>
     </include>
     <include>
       <uri>model://standee_c02</uri>
       <name>A_north_2</name>
-      <pose>-0.9170 1.2080 0 0 0 -1.5708</pose>
+      <pose>-1.0520 1.2080 0 0 0 -1.5708</pose>
     </include>
     <include>
       <uri>model://standee_c03</uri>
-      <name>A_south_1</name>
-      <pose>-1.0070 1.1070 0 0 0 1.5708</pose>
+      <name>A_north_3</name>
+      <pose>-0.9620 1.2080 0 0 0 -1.5708</pose>
     </include>
     <include>
       <uri>model://standee_c04</uri>
+      <name>A_north_4</name>
+      <pose>-0.8720 1.2080 0 0 0 -1.5708</pose>
+    </include>
+    <include>
+      <uri>model://standee_c05</uri>
+      <name>A_north_5</name>
+      <pose>-0.7820 1.2080 0 0 0 -1.5708</pose>
+    </include>
+    <include>
+      <uri>model://standee_c06</uri>
+      <name>A_south_1</name>
+      <pose>-1.0970 1.1070 0 0 0 1.5708</pose>
+    </include>
+    <include>
+      <uri>model://standee_c07</uri>
       <name>A_south_2</name>
+      <pose>-1.0070 1.1070 0 0 0 1.5708</pose>
+    </include>
+    <include>
+      <uri>model://standee_c08</uri>
+      <name>A_south_3</name>
       <pose>-0.9170 1.1070 0 0 0 1.5708</pose>
+    </include>
+    <include>
+      <uri>model://standee_c09</uri>
+      <name>A_south_4</name>
+      <pose>-0.8270 1.1070 0 0 0 1.5708</pose>
     </include>
     <include>
       <uri>model://standee_F1</uri>
@@ -179,22 +204,27 @@
       <pose>-1.2120 1.1575 0 0 0 0.0000</pose>
     </include>
     <include>
-      <uri>model://standee_c06</uri>
+      <uri>model://standee_c10</uri>
       <name>B_north_1</name>
-      <pose>-1.0310 -0.1030 0 0 0 -1.5708</pose>
+      <pose>-1.0760 -0.1030 0 0 0 -1.5708</pose>
     </include>
     <include>
-      <uri>model://standee_c07</uri>
+      <uri>model://standee_c11</uri>
       <name>B_north_2</name>
-      <pose>-0.9410 -0.1030 0 0 0 -1.5708</pose>
+      <pose>-0.9860 -0.1030 0 0 0 -1.5708</pose>
     </include>
     <include>
-      <uri>model://standee_c05</uri>
+      <uri>model://standee_c12</uri>
       <name>B_north_3</name>
-      <pose>-0.8510 -0.1030 0 0 0 -1.5708</pose>
+      <pose>-0.8960 -0.1030 0 0 0 -1.5708</pose>
     </include>
     <include>
-      <uri>model://standee_c08</uri>
+      <uri>model://standee_c13</uri>
+      <name>B_north_4</name>
+      <pose>-0.8060 -0.1030 0 0 0 -1.5708</pose>
+    </include>
+    <include>
+      <uri>model://standee_c14</uri>
       <name>B_east_1</name>
       <pose>-0.7070 -0.2150 0 0 0 3.1416</pose>
     </include>

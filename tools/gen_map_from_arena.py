@@ -82,7 +82,12 @@ def main():
         for (x0, y0, x1, y1) in yaml.safe_load(open(a.obstacles)):
             occ |= (CX >= x0) & (CX <= x1) & (CY >= y0) & (CY <= y1)
 
-    img = np.where(occ, 0, 254).astype(np.uint8)   # 0=障碍 254=空闲 (map_server 约定)
+    # ★ PGM 的行序与 map_server 的约定相反 (map_server 把第一行当作 y 最大处),
+    #   所以这里必须上下翻转, 否则地图整体沿 y 镜像。
+    #   为什么以前没暴露: 以前地图里只有四面**对称**的墙, 翻转前后完全一样;
+    #   2026-10-09 加了 A/B 街区与停车列这些**非对称**障碍后, 障碍落到了镜像位置
+    #   (实测: A 街区被标成可通行、起点被标成障碍)。
+    img = np.where(occ, 0, 254).astype(np.uint8)[::-1]   # 0=障碍 254=空闲
 
     out = a.out
     os.makedirs(os.path.dirname(out), exist_ok=True)

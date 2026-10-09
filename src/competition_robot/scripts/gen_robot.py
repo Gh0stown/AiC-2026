@@ -311,8 +311,19 @@ def build(params):
     # 2D 单线激光雷达 (实车 N10_P)
     l2 = sen.get('lidar2d', {})
     if l2.get('enabled'):
+        # ★ 扫描角范围: 整圈(-pi..pi) / 自定义(angle_min_deg~angle_max_deg) / 前 180°
+        #   为什么要自定义: 雷达为了扫到 15 cm 立牌而装到**车体前方**(车体在它正后方),
+        #   整圈扫会把一部分光束打在自己壳上; 但只扫前 180° 又太少 (AMCL 在行驶中漂到
+        #   0.2~0.5 m)。装到前方 0.32 m 的支架上后, 车体遮挡只剩 ±40°,
+        #   于是扫 ±140° (280°) 既避开自遮挡、又保留足够墙面给 AMCL。
         full = bool(l2.get('use_full_circle', True))
-        amin, amax = (-math.pi, math.pi) if full else (-math.pi / 2.0, math.pi / 2.0)
+        if full:
+            amin, amax = -math.pi, math.pi
+        elif l2.get('angle_min_deg') is not None and l2.get('angle_max_deg') is not None:
+            amin = math.radians(float(l2['angle_min_deg']))
+            amax = math.radians(float(l2['angle_max_deg']))
+        else:
+            amin, amax = (-math.pi / 2.0, math.pi / 2.0)
         out.append('\n  <!-- ================= 2D 激光雷达 (%s) ================= -->\n'
                    % l2.get('model', ''))
         geo = ('    <visual>\n'

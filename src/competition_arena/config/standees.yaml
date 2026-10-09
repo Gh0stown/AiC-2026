@@ -1,7 +1,7 @@
 # 人偶立牌清单 (唯一真值源) —— 由 tools/gen_standees.py 生成
 #
 # 素材: ~/复赛资料/人员/  (社区人员 1~16, 非社区人员 F1/F2)
-# 尺寸: 高 0.150 m, 宽按各图长宽比 (用户确认实物 15x5 cm)
+# 尺寸: 高 0.150 m x 宽 0.050 m x 厚 5 mm (官方统一尺寸; 人物按 contain 居中)
 #
 # 摆放: 用 tools/setup_standees.py 按下面的 blocks 计划生成 <include>
 #   朝向: 模型板面朝 +x -> yaw 决定面向 (北=+y 90, 南=-y -90, 东=+x 0, 西=-x 180)
@@ -11,126 +11,126 @@ standees:
   model: standee_c01
   category: community
   source: 1.png
-  width_m: 0.0661
+  width_m: 0.05
   height_m: 0.15
   material: Standee/c01
 - name: standee_c02
   model: standee_c02
   category: community
   source: 2.png
-  width_m: 0.0542
+  width_m: 0.05
   height_m: 0.15
   material: Standee/c02
 - name: standee_c03
   model: standee_c03
   category: community
   source: 3.png
-  width_m: 0.0702
+  width_m: 0.05
   height_m: 0.15
   material: Standee/c03
 - name: standee_c04
   model: standee_c04
   category: community
   source: 4.png
-  width_m: 0.0703
+  width_m: 0.05
   height_m: 0.15
   material: Standee/c04
 - name: standee_c05
   model: standee_c05
   category: community
   source: 5.png
-  width_m: 0.0476
+  width_m: 0.05
   height_m: 0.15
   material: Standee/c05
 - name: standee_c06
   model: standee_c06
   category: community
   source: 6.png
-  width_m: 0.046
+  width_m: 0.05
   height_m: 0.15
   material: Standee/c06
 - name: standee_c07
   model: standee_c07
   category: community
   source: 7.png
-  width_m: 0.0579
+  width_m: 0.05
   height_m: 0.15
   material: Standee/c07
 - name: standee_c08
   model: standee_c08
   category: community
   source: 8.png
-  width_m: 0.0553
+  width_m: 0.05
   height_m: 0.15
   material: Standee/c08
 - name: standee_c09
   model: standee_c09
   category: community
   source: 9.png
-  width_m: 0.0507
+  width_m: 0.05
   height_m: 0.15
   material: Standee/c09
 - name: standee_c10
   model: standee_c10
   category: community
   source: 10.png
-  width_m: 0.0601
+  width_m: 0.05
   height_m: 0.15
   material: Standee/c10
 - name: standee_c11
   model: standee_c11
   category: community
   source: 11.png
-  width_m: 0.0507
+  width_m: 0.05
   height_m: 0.15
   material: Standee/c11
 - name: standee_c12
   model: standee_c12
   category: community
   source: 12.png
-  width_m: 0.049
+  width_m: 0.05
   height_m: 0.15
   material: Standee/c12
 - name: standee_c13
   model: standee_c13
   category: community
   source: 13.png
-  width_m: 0.0532
+  width_m: 0.05
   height_m: 0.15
   material: Standee/c13
 - name: standee_c14
   model: standee_c14
   category: community
   source: 14.png
-  width_m: 0.0544
+  width_m: 0.05
   height_m: 0.15
   material: Standee/c14
 - name: standee_c15
   model: standee_c15
   category: community
   source: 15.png
-  width_m: 0.0534
+  width_m: 0.05
   height_m: 0.15
   material: Standee/c15
 - name: standee_c16
   model: standee_c16
   category: community
   source: 16.png
-  width_m: 0.039
+  width_m: 0.05
   height_m: 0.15
   material: Standee/c16
 - name: standee_F1
   model: standee_F1
   category: non_community
   source: F1.png
-  width_m: 0.0497
+  width_m: 0.05
   height_m: 0.15
   material: Standee/F1
 - name: standee_F2
   model: standee_F2
   category: non_community
   source: F2.png
-  width_m: 0.0642
+  width_m: 0.05
   height_m: 0.15
   material: Standee/F2
 blocks:
@@ -146,14 +146,16 @@ blocks:
     people:
     - standee_c01
     - standee_c02
-  - edge: south
-    people:
     - standee_c03
     - standee_c04
+    - standee_c05
+  - edge: south
+    people:
+    - standee_c06
+    - standee_c07
+    - standee_c08
+    - standee_c09
   - edge: west
-    # ★ 街区人偶数量对齐官方示意图(A 5 / B 5): 原 A 有 6 个(c05 与 F1 挤在只有
-    #   0.101 m 可用长度的西边上, 间距 0.090 只剩 5 mm 余量), 把 c05 匀到 B 的北边。
-    #   A 西边只留 F1(非社区), 这样 A/B 两个街区各自都仍有"社区 + 非社区"两类。
     people:
     - standee_F1
 - name: B
@@ -166,10 +168,11 @@ blocks:
   edges:
   - edge: north
     people:
-    - standee_c06
-    - standee_c07
-    - standee_c05          # ★ 由 A 街区匀来 (官方示意图 A/B 各 5 个)
+    - standee_c10
+    - standee_c11
+    - standee_c12
+    - standee_c13
   - edge: east
     people:
-    - standee_c08
+    - standee_c14
     - standee_F2

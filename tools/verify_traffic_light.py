@@ -127,13 +127,13 @@ def main():
                                lambda m: seen.append(m.data.strip().lower()), queue_size=10)
         cmd.publish(String(data='auto'))
         t1 = time.time()
-        while time.time() - t1 < 22.0 and len(set(seen)) < 3:
+        while time.time() - t1 < 35.0 and len(set(seen)) < 3:
             rospy.sleep(0.3)
         sub.unregister()
         got = [c for c in ('green', 'yellow', 'red') if c in set(seen)]
-        print('自动循环检查: 22 秒内观察到 %s' % (', '.join(got) if got else '(什么都没收到)'))
+        print('自动循环检查: 35 秒内观察到 %s' % (', '.join(got) if got else '(什么都没收到)'))
         if len(got) >= 2:
-            print('  ✓ 循环节点在工作 (时序见 config/traffic_lights.yaml: 绿15s->黄3s->红10s)')
+            print('  ✓ 循环节点在工作 (时序见 config/traffic_lights.yaml: 绿15s->黄5s->红10s)')
         else:
             print('  ✗ 只看到 %d 种状态 —— 检查 traffic_light 节点是否在跑' % len(got))
             cycle_bad = 1

@@ -1,13 +1,13 @@
 <?xml version="1.0"?>
 <sdf version="1.7">
   <model name="standee_c04">
-    <!-- 人偶立牌: 高 0.150 m x 宽 0.070 m x 厚 0.003 m
+    <!-- 人偶立牌: 高 0.150 m x 宽 0.050 m x 厚 0.005 m
          尺寸来源: ~/复赛资料/人员/ (用户确认 15x5 cm) -->
     <static>true</static>
     <link name="link">
       <visual name="board">
         <pose>0 0 0.0790 0 0 0</pose>
-        <geometry><box><size>0.0030 0.0703 0.1500</size></box></geometry>
+        <geometry><box><size>0.0050 0.0500 0.1500</size></box></geometry>
         <material>
           <script>
             <uri>model://standee_c04/materials/scripts</uri>
@@ -25,22 +25,22 @@
              ~/复赛资料/人员/ 的原图对: 车道侧要看到人物正面
              (c01=戴草帽拿修枝剪的园艺工, c02=抱书的眼镜男)。 -->
       <visual name="back">
-        <pose>0.0025 0 0.0790 0 0 0</pose>
-        <geometry><box><size>0.0010 0.0723 0.1520</size></box></geometry>
+        <pose>0.0035 0 0.0790 0 0 0</pose>
+        <geometry><box><size>0.0010 0.0520 0.1520</size></box></geometry>
         <material><ambient>0.90 0.89 0.86 1</ambient><diffuse>0.90 0.89 0.86 1</diffuse></material>
       </visual>
       <visual name="base">
         <pose>0 0 0.0020 0 0 0</pose>
-        <geometry><box><size>0.0450 0.0703 0.0040</size></box></geometry>
+        <geometry><box><size>0.0450 0.0500 0.0040</size></box></geometry>
         <material><ambient>0.92 0.92 0.92 1</ambient><diffuse>0.92 0.92 0.92 1</diffuse></material>
       </visual>
       <collision name="col">
         <pose>0 0 0.0790 0 0 0</pose>
-        <geometry><box><size>0.0030 0.0703 0.1500</size></box></geometry>
+        <geometry><box><size>0.0050 0.0500 0.1500</size></box></geometry>
       </collision>
       <collision name="base_c">
         <pose>0 0 0.0020 0 0 0</pose>
-        <geometry><box><size>0.0450 0.0703 0.0040</size></box></geometry>
+        <geometry><box><size>0.0450 0.0500 0.0040</size></box></geometry>
       </collision>
     </link>
   </model>

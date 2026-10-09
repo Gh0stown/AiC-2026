@@ -39,8 +39,9 @@ PKG = os.path.join(WS, 'src', 'competition_arena')
 SRC = os.path.expanduser('~/复赛资料/人员')
 CFG = os.path.join(PKG, 'config', 'standees.yaml')
 
-STANDEE_H = 0.150      # 立牌高 15 cm
-THICK = 0.003          # 厚 3 mm
+STANDEE_H = 0.150      # 立牌高 15 cm (官方)
+BOARD_W = 0.050        # 立牌宽 5 cm (官方, 统一尺寸)
+THICK = 0.005          # 厚 5 mm (官方)
 BASE_H = 0.004         # 底座厚 4 mm (实物立牌下面有个折起来的支撑)
 BASE_X = 0.045         # 底座前后伸出 (防止前后倒)
 
@@ -66,14 +67,25 @@ BASE_X = 0.045         # 底座前后伸出 (防止前后倒)
 #   B 街区深 0.73m, 可以缩到 0.30。
 BLOCKS = [
     # inset_m: 该街区立牌往边线内缩多少 (直接决定正对拍摄能拍到多少身体)
+    # ★ 2026-10-09 官方新规则: 每次摆场 **>= 14 个社区人员 + 2 个非社区人员 (=16)**,
+    #   且不允许"一个街区只有 1 个人偶"。本布局 16 个: A 10 (9 社区 + F1) / B 6 (5 社区 + F2)。
+    #   各边人数与可用长度 (同组间距 0.090 m, 立牌宽 0.050 m -> 净间隙 4 cm):
+    #     A north 5 (span 0.36 <= 0.500)  A south 4 (0.27 <= 0.500)  A west 1 (居中)
+    #     B north 4 (span 0.27 <= 0.468)  B east  2 (0.09 <= 0.134)
+    #   ★ 为什么把多的人放 A 而不是 B: B 只有 north/east 两条边, 若 north 放 5 个,
+    #     它靠东那一端与 east 边那组最近只剩 29 mm (setup_standees 的跨组干涉检查报警)。
+    #     A 有 north/south/west 三条边, 多出来的 2 个放 north 不会挤到角上。
     dict(name='A', inset_m=0.26, rect=[-1.472, 0.847, -0.452, 1.468], edges=[
-        dict(edge='north', people=['standee_c01', 'standee_c02']),
-        dict(edge='south', people=['standee_c03', 'standee_c04']),
-        dict(edge='west',  people=['standee_c05', 'standee_F1']),
+        dict(edge='north', people=['standee_c01', 'standee_c02', 'standee_c03',
+                                   'standee_c04', 'standee_c05']),
+        dict(edge='south', people=['standee_c06', 'standee_c07', 'standee_c08',
+                                   'standee_c09']),
+        dict(edge='west',  people=['standee_F1']),
     ]),
     dict(name='B', inset_m=0.30, rect=[-1.475, -0.537, -0.407, 0.197], edges=[
-        dict(edge='north', people=['standee_c06', 'standee_c07']),
-        dict(edge='east',  people=['standee_c08', 'standee_F2']),
+        dict(edge='north', people=['standee_c10', 'standee_c11', 'standee_c12',
+                                   'standee_c13']),
+        dict(edge='east',  people=['standee_c14', 'standee_F2']),
     ]),
 ]
 
@@ -109,7 +121,21 @@ def write_model(name, src_png, size_m, mat_name):
     os.makedirs(tex_d, exist_ok=True)
     os.makedirs(scr_d, exist_ok=True)
 
-    shutil.copyfile(src_png, os.path.join(tex_d, '%s.png' % name))
+    # ★ 官方尺寸 5x15 cm: 把人物按 contain 居中放进 5:15 画布, 四边留透明
+    #   (alpha_rejection 会把透明像素丢掉, 所以板面边距是透明的; 后面那块白底板
+    #    就是"板子本体", 于是视觉上仍是一块白色立牌, 尺寸与雷达反射面与官方一致)。
+    art = Image.open(src_png).convert('RGBA')
+    bb = art.split()[-1].getbbox()
+    if bb:
+        art = art.crop(bb)
+    cw = int(round(w / h * 600.0)); ch = 600
+    k = min(cw / float(art.width), ch / float(art.height))
+    if k < 1.0:
+        art = art.resize((max(1, int(art.width * k)), max(1, int(art.height * k))),
+                         Image.LANCZOS)
+    canvas = Image.new('RGBA', (cw, ch), (0, 0, 0, 0))
+    canvas.paste(art, ((cw - art.width) // 2, ch - art.height), art)   # 脚踩板底
+    canvas.save(os.path.join(tex_d, '%s.png' % name))
 
     # OGRE 材质: alpha_rejection 直接把透明像素丢掉, 立牌边缘就是人物轮廓
     # ★ 材质脚本的**文件名也必须每个模型唯一**: OGRE 把资源按"文件名"全局注册,
@@ -206,6 +232,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--height', type=float, default=STANDEE_H, help='立牌高 (m), 默认 0.15')
     ap.add_argument('--list', action='store_true', help='只打印清单')
+    ap.add_argument('--aspect', action='store_true',
+                    help='旧行为: 宽度按各图长宽比 (默认统一 5 cm 宽, 官方尺寸)')
     a = ap.parse_args()
 
     if not os.path.isdir(SRC):
@@ -224,7 +252,9 @@ def main():
         im = Image.open(src)
         trimmed, pw, ph = trim(im)
         h = a.height
-        w = h * pw / float(ph)
+        # ★ 官方统一尺寸: 高 15 cm、宽 5 cm。素材各图轮廓比不同 (15cm 高时 39~70 mm),
+        #   所以板面一律 5x15, 人物按 contain 居中放进去 (四边留透明) —— 见 write_model。
+        w = BOARD_W if not a.aspect else h * pw / float(ph)
         mat = 'Standee/%s' % name.replace('standee_', '')
         print('%-14s %-10s %-16s %-12s %.3f x %.3f'
               % (name, '社区' if cat == 'community' else '非社区', orig,
@@ -243,11 +273,11 @@ def main():
             f.write('# 人偶立牌清单 (唯一真值源) —— 由 tools/gen_standees.py 生成\n'
                     '#\n'
                     '# 素材: ~/复赛资料/人员/  (社区人员 1~16, 非社区人员 F1/F2)\n'
-                    '# 尺寸: 高 %.3f m, 宽按各图长宽比 (用户确认实物 15x5 cm)\n'
+                    '# 尺寸: 高 %.3f m x 宽 %.3f m x 厚 5 mm (官方统一尺寸; 人物按 contain 居中)\n'
                     '#\n'
                     '# 摆放: 用 tools/setup_standees.py 按下面的 blocks 计划生成 <include>\n'
                     '#   朝向: 模型板面朝 +x -> yaw 决定面向 (北=+y 90, 南=-y -90, 东=+x 0, 西=-x 180)\n\n'
-                    % h)
+                    % (h, BOARD_W))
             # ★ inset_m: 立牌从街区边线往内缩多少。改成 0.20 (原来 0.032) 的原因:
             #   识别是"开到点位正对着拍", 相机只有 0.20m 高且无俯仰, 站得越近切得越多:
             #   拍摄距离 d -> 可见高度 ≈ 0.366*d - 0.046。往里挪 0.20m 后 d 从

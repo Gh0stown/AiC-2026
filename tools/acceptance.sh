@@ -174,8 +174,10 @@ want = {
     '围场墙':          ['arena_walls'],
     '机器人':          ['competition_robot'],
     '红绿灯':          ['tl_top', 'tl_bot'],
-    '人偶立牌(A街区)': ['A_north_1', 'A_north_2', 'A_south_1', 'A_south_2', 'A_west_1'],
-    '人偶立牌(B街区)': ['B_north_1', 'B_north_2', 'B_north_3', 'B_east_1', 'B_east_2'],
+    '人偶立牌(A街区)': ['A_north_1', 'A_north_2', 'A_north_3', 'A_north_4', 'A_north_5',
+                     'A_south_1', 'A_south_2', 'A_south_3', 'A_south_4', 'A_west_1'],
+    '人偶立牌(B街区)': ['B_north_1', 'B_north_2', 'B_north_3', 'B_north_4',
+                     'B_east_1', 'B_east_2'],
     '车辆+车牌':       ['car_1_p', 'car_2_p', 'car_3_p'],
 }
 badn = 0
@@ -188,7 +190,7 @@ for k, v in want.items():
 print('  MISSING_TOTAL=%d' % badn)
 PY
 if grep -q "MISSING_TOTAL=0" "$LOGD/check1.txt" 2>/dev/null; then
-  ok "场景完整性: 场地/墙/机器人/红绿灯/10 个人偶/3 辆车 全部加载"
+  ok "场景完整性: 场地/墙/机器人/红绿灯/16 个人偶/3 辆车 全部加载"
 else
   bad "场景完整性: 有模型没加载 (详见 $LOGD/check1.txt)"
 fi

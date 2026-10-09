@@ -4,7 +4,7 @@
   改参数请编辑 config/robot_params.yaml, 然后重新运行:
       python3 scripts/gen_robot.py
 
-  生成时间   : 2026-09-21 22:26:17
+  生成时间   : 2026-10-09 18:31:27
   底盘构型   : 四轮麦克纳姆 (X 型布局)
   轮径/轮宽  : 0.0485 / 0.0506 m
   轴距/轮距  : 0.2070 / 0.2908 m
@@ -199,7 +199,7 @@
   <joint name="laser_joint" type="fixed">
     <parent link="base_link"/>
     <child link="laser_link"/>
-    <origin xyz="0.13374 0 0.2" rpy="0 0 0"/>
+    <origin xyz="0.32 0 0.12" rpy="0 0 0"/>
   </joint>
   <gazebo reference="laser_link">
     <sensor type="ray" name="lidar2d">
@@ -211,8 +211,8 @@
           <horizontal>
             <samples>720</samples>
             <resolution>1</resolution>
-            <min_angle>-3.141593</min_angle>
-            <max_angle>3.141593</max_angle>
+            <min_angle>-2.443461</min_angle>
+            <max_angle>2.443461</max_angle>
           </horizontal>
         </scan>
         <range>
