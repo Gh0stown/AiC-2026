@@ -224,25 +224,32 @@ def gen_plate(rng):
                         ''.join(rng.choice(PLATE_CHARS) for _ in range(5)))
 
 
-def render_plate(text, out_png, size=PLATE_PX):
-    """按官方样式画车牌: 白边 + 官方蓝底 + 白字 (省简称 + 字母 + 圆点 + 5 位)。
+def render_plate(text, out_png, size=(400, 127)):
+    """按官方样式画蓝牌: 号牌底板 + 号牌字体(ChePai) + 省份汉字。
 
-    ★ 官方号牌用的是**窄体**字体: 字高约占板高 50%, 但字宽只有字高的 0.5 左右,
-      所以 7 个字 + 一个圆点能挤进 200 px。系统字体 (雅黑/黑体) 偏宽, 直接排会超宽
-      (第一版固定字距 -> 排到板外被裁; 第二版按字宽自动缩小 -> 字又太小)。
-      这里改成: 按 0.50*板高 正常画到透明层, 再**横向压缩**到可用宽度 —— 字高保持
-      与官方一致, 字宽变窄, 观感与官方窄体号牌一致。
+    素材见 config/plate/README.md。做法与真实号牌一致:
+      * 底图 = 蓝底白框 + 安装孔 + 中间防伪金点(就是号牌上的分隔点)
+      * 省份汉字 = 中文字体 (号牌字体只有字母数字, 与实物同理)
+      * 其余字符 = 号牌专用字体 ChePai
+    布局按底图上金点的位置分左右两段 (金点约在 31.7% 处): 左 2 字(省+字母), 右 5 位。
     """
     from PIL import Image, ImageDraw, ImageFont
     W, H = size
-    im = Image.new('RGB', (W, H), PLATE_FG)
+    base = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..',
+                        'src', 'competition_arena', 'config', 'plate')
+    tpl = os.path.join(base, 'blue_template.png')
+    im = Image.open(tpl).convert('RGB').resize((W, H), Image.LANCZOS) if os.path.isfile(tpl) \
+        else Image.new('RGB', (W, H), PLATE_BG)
     d = ImageDraw.Draw(im)
-    d.rectangle([PLATE_BORDER, PLATE_BORDER, W - 1 - PLATE_BORDER, H - 1 - PLATE_BORDER],
-                fill=PLATE_BG)
 
-    def font(px):
-        for fp in ('/mnt/c/Windows/Fonts/msyhbd.ttc', '/usr/share/fonts/truetype/simhei/simhei.ttf',
-                   '/mnt/c/Windows/Fonts/simhei.ttf',
+    def plate_font(px):
+        fp = os.path.join(base, 'platechar.ttf')
+        if os.path.isfile(fp):
+            return ImageFont.truetype(fp, px)
+        return cjk_font(px)
+
+    def cjk_font(px):
+        for fp in ('/mnt/c/Windows/Fonts/msyhbd.ttc', '/mnt/c/Windows/Fonts/simhei.ttf',
                    '/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf'):
             if os.path.isfile(fp):
                 try:
@@ -251,30 +258,25 @@ def render_plate(text, out_png, size=PLATE_PX):
                     pass
         return ImageFont.load_default()
 
-    head, serial = text.split('·')
-    glyphs = list(head) + ['·'] + list(serial)           # 省 + 字母 + · + 5 位
-    f = font(int(H * 0.50))
-    meas = ImageDraw.Draw(Image.new('RGB', (10, 10)))
-    gap = max(2, int(H * 0.04))
-    dot_w = max(6, int(H * 0.08))
-    widths = [dot_w if g == '·' else meas.textlength(g, font=f) for g in glyphs]
-    raw_w = int(sum(widths) + gap * (len(glyphs) - 1))
+    head, serial = text.split('·')                     # 省 + 字母 | 5 位
+    dot_x = int(W * 0.317)                             # 底图上防伪金点的位置
+    f_cjk = int(H * 0.54)          # 省份汉字略小于号牌字体的字高, 与实物接近
+    f_big = int(H * 0.62)
 
-    layer = Image.new('RGBA', (raw_w, H), (0, 0, 0, 0))
-    ld = ImageDraw.Draw(layer)
-    x = 0.0
-    for g, w in zip(glyphs, widths):
-        if g == '·':
-            ld.ellipse([x + (w - dot_w) / 2, H / 2 - dot_w / 2 + 1,
-                        x + (w + dot_w) / 2, H / 2 + dot_w / 2 + 1], fill=PLATE_FG + (255,))
-        else:
-            ld.text((x + w / 2, H / 2), g, font=f, fill=PLATE_FG + (255,), anchor='mm')
-        x += w + gap
+    def spread(chars, x0, x1, font_of, top, height):
+        """在 [x0,x1] 区间内均匀排开几个字 (逐字居中)"""
+        n = len(chars)
+        step = (x1 - x0) / float(n)
+        for i, ch in enumerate(chars):
+            f = font_of(ch)
+            d.text((x0 + step * (i + 0.5), top + height / 2.0), ch, font=f,
+                   fill=PLATE_FG, anchor='mm')
 
-    avail = W - 2 * PLATE_BORDER - 16                    # 两侧各留 8px
-    if raw_w > avail:                                    # 横向压缩 (只压宽, 不压高)
-        layer = layer.resize((avail, H), Image.LANCZOS)
-    im.paste(layer, ((W - layer.width) // 2, 0), layer)
+    spread(head, int(W * 0.045), dot_x - int(W * 0.02),
+           lambda ch: cjk_font(f_cjk) if ord(ch) > 0x2000 else plate_font(f_big),
+           int(H * 0.17), int(H * 0.66))
+    spread(serial, dot_x + int(W * 0.03), int(W * 0.965),
+           lambda ch: plate_font(f_big), int(H * 0.17), int(H * 0.66))
     im.save(out_png)
     return out_png
 
