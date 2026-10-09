@@ -49,7 +49,9 @@ END = '    <!-- ===== 红绿灯结束 ===== -->'
 # =============================================================================
 HOUSING_W, HOUSING_H, HOUSING_D = 0.64, 0.14, 0.05   # 官方: 箱体 64x14 cm, 厚 5 cm   # 灯箱 宽 × 高 × 厚
 HOUSING_Z = 0.34                                     # 灯箱下沿离地
-LENS_R, LENS_T = 0.0425, 0.006                       # 常驻暗透镜 半径/厚
+LENS_R, LENS_T = 0.0425, 0.006
+FACE_T = 0.0012        # 贴照片的薄方板厚
+FACE_W = 0.0860        # 薄方板边长 (= 灯罩直径; 四角被 alpha 蒙版丢掉 -> 只显圆灯面)                       # 常驻暗透镜 半径/厚
 LAMP_R, LAMP_T = 0.0425, 0.008                       # 发光灯珠   半径/厚
 LAMP_PITCH = 0.22                                    # 灯珠中心间距
 POST_W = 0.025                                       # 支架方柱边长
@@ -176,13 +178,24 @@ def model_sdf(name, layout, posts='double'):
                  % (i, py, foot_x, foot_y))
 
     # ---- 三颗"常驻暗透镜" (真实红绿灯的三个透镜始终可见, 只是亮暗不同) ----
+    # ★ 贴在**薄方板**上, 而不是圆柱端面:
+    #   Gazebo 的 cylinder 端面 UV 是**极坐标**(u=角度, v=半径), 把方形的官方照片
+    #   贴上去会被拧成漩涡 (实测: LED 点阵呈螺旋状)。改为:
+    #     圆柱 = 纯黑, 只负责"圆形"轮廓与压圈观感
+    #     方板 = 贴在圆柱正面, 平面 UV 1:1 映射官方照片, 不扭曲
+    #   官方照片四角本来就是黑色灯箱, 与黑圆柱融为一体; 板比灯罩略小 -> 四周留出压圈。
     for c, (ox, oy, oz) in off.items():
         o.append('      <visual name="lens_%s"><pose>%.4f %.3f %.3f 0 1.5708 0</pose>'
                  '<geometry><cylinder><radius>%.4f</radius><length>%.4f</length></cylinder>'
-                 '</geometry><material><script><uri>model://traffic_light_h/materials/scripts'
-                 '</uri><uri>model://traffic_light_h/materials/textures</uri>'
+                 '</geometry><material><ambient>%s</ambient><diffuse>%s</diffuse>'
+                 '</material></visual>'
+                 % (c, fx, oy, oz, LENS_R, LENS_T, rgba(HOUSING_C), rgba(HOUSING_C)))
+        o.append('      <visual name="lensface_%s"><pose>%.4f %.3f %.3f 0 0 0</pose>'
+                 '<geometry><box><size>%.4f %.4f %.4f</size></box></geometry>'
+                 '<material><script><uri>model://traffic_light_h/materials/scripts</uri>'
+                 '<uri>model://traffic_light_h/materials/textures</uri>'
                  '<name>LightLens/%s_off</name></script></material></visual>'
-                 % (c, fx, oy, oz, LENS_R, LENS_T, c))
+                 % (c, fx + LENS_T / 2.0 + 0.0006, oy, oz, FACE_T, FACE_W, FACE_W, c))
     o.append('    </link>')
 
     # ---- 三颗发光灯珠 (挂在滑动关节上) ----
@@ -193,10 +206,16 @@ def model_sdf(name, layout, posts='double'):
                  '<iyy>1e-5</iyy><iyz>0</iyz><izz>1e-5</izz></inertia></inertial>'
                  '<visual name="lamp"><pose>0 0 0 0 1.5708 0</pose><geometry><cylinder>'
                  '<radius>%.4f</radius><length>%.4f</length></cylinder></geometry><material>'
-                 '<script><uri>model://traffic_light_h/materials/scripts</uri>'
+                 '<ambient>%s</ambient><diffuse>%s</diffuse><emissive>%s</emissive>'
+                 '</material></visual>'
+                 '<visual name="lampface"><pose>%.4f 0 0 0 0 0</pose>'
+                 '<geometry><box><size>%.4f %.4f %.4f</size></box></geometry>'
+                 '<material><script><uri>model://traffic_light_h/materials/scripts</uri>'
                  '<uri>model://traffic_light_h/materials/textures</uri>'
                  '<name>LightLamp/%s_on</name></script></material></visual></link>'
-                 % (c, ox, oy, oz, LAMP_R, LAMP_T, c))
+                 % (c, ox, oy, oz, LAMP_R, LAMP_T,
+                    rgba(LIT[c]), rgba(LIT[c]), rgba(LIT[c]),
+                    LAMP_T / 2.0 + 0.0006, FACE_T, FACE_W, FACE_W, c))
         o.append('    <joint name="j_%s" type="prismatic"><parent>base</parent>'
                  '<child>lamp_%s</child><pose>0 0 0 0 0 0</pose><axis><xyz>1 0 0</xyz>'
                  '<limit><lower>%.3f</lower><upper>%.3f</upper><effort>1</effort>'

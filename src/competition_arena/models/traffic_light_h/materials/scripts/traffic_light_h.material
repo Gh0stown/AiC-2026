@@ -8,6 +8,7 @@ material LightLens/red_off
     ambient 0.55 0.55 0.55 1
     diffuse 0.95 0.95 0.95 1
     specular 0.05 0.05 0.05 1 4
+    alpha_rejection greater_equal 128
     texture_unit { texture lens_red_off.png filtering anisotropic max_anisotropy 8 }
   } }
 }
@@ -17,6 +18,7 @@ material LightLamp/red_on
     ambient 1 1 1 1
     diffuse 1 1 1 1
     emissive 0.55 0.55 0.55 1
+    alpha_rejection greater_equal 128
     texture_unit { texture lens_red_on.png filtering anisotropic max_anisotropy 8 }
   } }
 }
@@ -27,6 +29,7 @@ material LightLens/yellow_off
     ambient 0.55 0.55 0.55 1
     diffuse 0.95 0.95 0.95 1
     specular 0.05 0.05 0.05 1 4
+    alpha_rejection greater_equal 128
     texture_unit { texture lens_yellow_off.png filtering anisotropic max_anisotropy 8 }
   } }
 }
@@ -36,6 +39,7 @@ material LightLamp/yellow_on
     ambient 1 1 1 1
     diffuse 1 1 1 1
     emissive 0.55 0.55 0.55 1
+    alpha_rejection greater_equal 128
     texture_unit { texture lens_yellow_on.png filtering anisotropic max_anisotropy 8 }
   } }
 }
@@ -46,6 +50,7 @@ material LightLens/green_off
     ambient 0.55 0.55 0.55 1
     diffuse 0.95 0.95 0.95 1
     specular 0.05 0.05 0.05 1 4
+    alpha_rejection greater_equal 128
     texture_unit { texture lens_green_off.png filtering anisotropic max_anisotropy 8 }
   } }
 }
@@ -55,6 +60,7 @@ material LightLamp/green_on
     ambient 1 1 1 1
     diffuse 1 1 1 1
     emissive 0.55 0.55 0.55 1
+    alpha_rejection greater_equal 128
     texture_unit { texture lens_green_on.png filtering anisotropic max_anisotropy 8 }
   } }
 }
