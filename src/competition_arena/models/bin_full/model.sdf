@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="bin_full">
+    <static>true</static>
+    <link name="link">
+<visual name="body"><pose>0 0 0.0440 0 0 0</pose><geometry><cylinder><radius>0.0260</radius><length>0.0880</length></cylinder></geometry><material><ambient>0.22 0.45 0.28 1</ambient><diffuse>0.22 0.45 0.28 1</diffuse></material></visual>
+      <collision name="body_c_c"><pose>0 0 0.0440 0 0 0</pose><geometry><cylinder><radius>0.0260</radius><length>0.0880</length></cylinder></geometry></collision>
+      <visual name="rim"><pose>0 0 0.0840 0 0 0</pose><geometry><box><size>0.0572 0.0572 0.008</size></box></geometry><material><ambient>0.16 0.34 0.20 1</ambient><diffuse>0.16 0.34 0.20 1</diffuse></material></visual>
+      <visual name="lid"><pose>0.0234 0 0.1100 0 -0.55 0</pose><geometry><box><size>0.0572 0.0572 0.006</size></box></geometry><material><ambient>0.20 0.40 0.24 1</ambient><diffuse>0.20 0.40 0.24 1</diffuse></material></visual>
+      <visual name="trash0"><pose>-0.010 0.004 0.0980 0.00 0 0.00</pose><geometry><box><size>0.020 0.016 0.014</size></box></geometry><material><ambient>0.55 0.48 0.30 1</ambient><diffuse>0.55 0.48 0.30 1</diffuse></material></visual>
+      <visual name="trash1"><pose>0.000 -0.004 0.0980 0.30 0 0.40</pose><geometry><box><size>0.020 0.016 0.014</size></box></geometry><material><ambient>0.55 0.48 0.30 1</ambient><diffuse>0.55 0.48 0.30 1</diffuse></material></visual>
+      <visual name="trash2"><pose>0.010 0.004 0.0980 0.60 0 0.80</pose><geometry><box><size>0.020 0.016 0.014</size></box></geometry><material><ambient>0.55 0.48 0.30 1</ambient><diffuse>0.55 0.48 0.30 1</diffuse></material></visual>
+    </link>
+  </model>
+</sdf>

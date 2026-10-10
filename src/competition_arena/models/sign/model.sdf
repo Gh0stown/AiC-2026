@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="sign">
+    <static>true</static>
+    <link name="link">
+<visual name="post"><pose>0 0 0.1325 0 0 0</pose><geometry><cylinder><radius>0.0060</radius><length>0.2650</length></cylinder></geometry><material><ambient>0.45 0.46 0.48 1</ambient><diffuse>0.45 0.46 0.48 1</diffuse></material></visual>
+      <collision name="post_c_c"><pose>0 0 0.1325 0 0 0</pose><geometry><cylinder><radius>0.0060</radius><length>0.2650</length></cylinder></geometry></collision>
+      <visual name="board"><pose>0 0 0.2200 0 0 0</pose><geometry><box><size>0.0750 0.0160 0.055</size></box></geometry><material><ambient>0.15 0.35 0.62 1</ambient><diffuse>0.15 0.35 0.62 1</diffuse></material></visual>
+      <collision name="board_c_c"><pose>0 0 0.2200 0 0 0</pose><geometry><box><size>0.0750 0.0160 0.055</size></box></geometry></collision>
+      <visual name="plate"><pose>0 -0.010 0.2200 0 0 0</pose><geometry><box><size>0.055 0.004 0.022</size></box></geometry><material><ambient>0.95 0.95 0.92 1</ambient><diffuse>0.95 0.95 0.92 1</diffuse></material></visual>
+    </link>
+  </model>
+</sdf>

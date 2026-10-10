@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="station">
+    <static>true</static>
+    <link name="link">
+<visual name="hut"><pose>0 0 0.1500 0 0 0</pose><geometry><box><size>0.340 0.260 0.300</size></box></geometry><material><ambient>0.72 0.70 0.66 1</ambient><diffuse>0.72 0.70 0.66 1</diffuse></material></visual>
+      <collision name="hut_c_c"><pose>0 0 0.1500 0 0 0</pose><geometry><box><size>0.340 0.260 0.300</size></box></geometry></collision>
+      <visual name="roof"><pose>0 0 0.3070 0 0 0</pose><geometry><box><size>0.370 0.290 0.014</size></box></geometry><material><ambient>0.42 0.40 0.38 1</ambient><diffuse>0.42 0.40 0.38 1</diffuse></material></visual>
+      <visual name="door"><pose>0 -0.1320 0.0380 0 0 0</pose><geometry><box><size>0.045 0.004 0.075</size></box></geometry><material><ambient>0.30 0.34 0.40 1</ambient><diffuse>0.30 0.34 0.40 1</diffuse></material></visual>
+      <visual name="gauge"><pose>-0.0850 -0.1340 0.1860 0 0 0</pose><geometry><box><size>0.055 0.006 0.055</size></box></geometry><material><script><uri>model://station/materials/scripts</uri><uri>model://station/materials/textures</uri><name>Gauge</name></script></material></visual>
+      <collision name="gauge_c_c"><pose>-0.0850 -0.1340 0.1860 0 0 0</pose><geometry><box><size>0.055 0.006 0.055</size></box></geometry></collision>
+      <visual name="plate"><pose>0.0680 -0.1330 0.1350 0 0 0</pose><geometry><box><size>0.075 0.004 0.03</size></box></geometry><material><ambient>0.90 0.90 0.88 1</ambient><diffuse>0.90 0.90 0.88 1</diffuse></material></visual>
+    </link>
+  </model>
+</sdf>

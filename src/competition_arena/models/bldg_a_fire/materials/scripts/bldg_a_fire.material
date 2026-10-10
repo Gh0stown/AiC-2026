@@ -1,0 +1,19 @@
+material BldgFacade
+{
+  technique { pass {
+    ambient 0.9 0.9 0.9 1
+    diffuse 1 1 1 1
+    emissive 0.25 0.25 0.25 1
+    texture_unit { texture facade.png }
+  } }
+}
+
+material BldgFire
+{
+  technique { pass {
+    ambient 0.9 0.9 0.9 1
+    diffuse 1 1 1 1
+    emissive 1 0.75 0.35 1
+    texture_unit { texture facade.png }
+  } }
+}

@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="bldg_b">
+    <static>true</static>
+    <link name="link">
+<visual name="mass"><pose>0 0 0.2200 0 0 0</pose><geometry><box><size>0.550 0.320 0.440</size></box></geometry><material><script><uri>model://bldg_b/materials/scripts</uri><uri>model://bldg_b/materials/textures</uri><name>BldgFacade</name></script></material></visual>
+      <collision name="mass_c_c"><pose>0 0 0.2200 0 0 0</pose><geometry><box><size>0.550 0.320 0.440</size></box></geometry></collision>
+      <visual name="roof"><pose>0 0 0.4460 0 0 0</pose><geometry><box><size>0.570 0.340 0.012</size></box></geometry><material><ambient>0.35 0.34 0.33 1</ambient><diffuse>0.35 0.34 0.33 1</diffuse></material></visual>
+      <visual name="door"><pose>0 -0.1620 0.0280 0 0 0</pose><geometry><box><size>0.035 0.004 0.055</size></box></geometry><material><ambient>0.25 0.22 0.20 1</ambient><diffuse>0.25 0.22 0.20 1</diffuse></material></visual>
+    </link>
+  </model>
+</sdf>

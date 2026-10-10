@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="bldg_a_fire">
+    <static>true</static>
+    <link name="link">
+<visual name="mass"><pose>0 0 0.2300 0 0 0</pose><geometry><box><size>0.620 0.340 0.460</size></box></geometry><material><script><uri>model://bldg_a_fire/materials/scripts</uri><uri>model://bldg_a_fire/materials/textures</uri><name>BldgFire</name></script></material></visual>
+      <collision name="mass_c_c"><pose>0 0 0.2300 0 0 0</pose><geometry><box><size>0.620 0.340 0.460</size></box></geometry></collision>
+      <visual name="roof"><pose>0 0 0.4660 0 0 0</pose><geometry><box><size>0.640 0.360 0.012</size></box></geometry><material><ambient>0.35 0.34 0.33 1</ambient><diffuse>0.35 0.34 0.33 1</diffuse></material></visual>
+      <visual name="door"><pose>0 -0.1720 0.0280 0 0 0</pose><geometry><box><size>0.035 0.004 0.055</size></box></geometry><material><ambient>0.25 0.22 0.20 1</ambient><diffuse>0.25 0.22 0.20 1</diffuse></material></visual>
+    </link>
+  </model>
+</sdf>
