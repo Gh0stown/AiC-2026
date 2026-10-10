@@ -7,7 +7,7 @@
 ![场地预览](src/competition_arena/docs/arena_topdown.png)
 
 > **第一次跑 / 换机器**：先看 [`docs/wsl_setup.md`](docs/wsl_setup.md)（依赖、clone 后怎么编、WSL 注意事项）。
-> **验收**：看 [`验收指南.md`](验收指南.md)（三条命令启动，或 `./tools/acceptance.sh` 一键 6 项检查）。
+> **验收**：看 [`验收指南.md`](验收指南.md)（三条命令启动，或 `./tools/acceptance.sh` 一键 **8 项 / 10 个检查**）。
 > **交接 / 现状**：看 [`交接文档.md`](交接文档.md)。
 > **一步一坑的排查记录**：看 [`docs/issue_log.md`](docs/issue_log.md)（16 条，含每条的现象 / 根因 / 修法 / 实测）。
 
@@ -24,10 +24,10 @@
 | **导航** | DWA（默认）/ TEB / TrajectoryPlanner 三套已装并横向对比 | 连续 6 个目标点 **6/6 到达、0 次恢复行为**；直线横向偏差 5 mm |
 | **巡检** | 17 站固定路线（10 个识别点，点位与拍照朝向**由几何算出**，不手填） | **17/17 到点、0 失败**；AMCL 到点误差 0.056 m；一圈 166 s |
 | **倒车入库** | 激光对墙的位姿伺服倒车（不靠定时 / 定距） | 见 [`验收指南.md`](验收指南.md) 基线值 |
-| **视觉·人偶立牌** | `weights/standee_yolo11n.pt`，2 类 `comm` / `non_comm` | 密集正方形数据：精确 **92.5%**、召回 **98.7%**；真实场地 5 个点位计数 **10/10** |
-| **视觉·车牌** | `weights/plate_yolo11n.pt` + HyperLPR3 识别网络 | 自采 105 张端到端 OCR **105/105**；独立场地数据 **87%** |
-| **视觉·红绿灯** | `weights/traffic_light_yolo11n.pt`，3 类，**直接检"亮着的那颗灯珠"**（不检灯箱） | 自采 90 张 **90/90**；红 / 黄灯原地停车等待，确认绿灯才走 |
-| **验收** | `tools/acceptance.sh` 一键 6 项自动检查 | 全绿 |
+| **视觉·人偶立牌** | `weights/standee_yolo11n.pt`，2 类 `comm` / `non_comm` | 训练 P/R/mAP50 **0.990**、mAP50-95 **0.913**；验收 5 个点位计数 **5/5**、街区合计 **2/2** |
+| **视觉·车牌** | `weights/plate_yolo11n.pt` + HyperLPR3 识别网络（同一框读 4 个边距/尺度变体，按"7 位优先"选）| 定稿号牌全帧 **检出 100%（220/220）**、端到端 OCR **99.1%**（集成前 94.4%）|
+| **视觉·红绿灯** | `weights/traffic_light_yolo11n.pt`（`traffic_light_final2`），3 类，**直接检"亮着的那颗灯珠"**（不检灯箱） | 训练 mAP50-95 **0.889**；独立全帧 **检出 100% / 颜色 98.9%**（178 张）；红 / 黄灯原地停车，确认绿灯才走 |
+| **验收** | `tools/acceptance.sh` 一键 **8 项 / 10 检查**（含识别核对、通行闸）| 最近一次 **10 项全过 / 0 失败** |
 
 ---
 
@@ -168,8 +168,8 @@ LIO-SAM / FAST-LIO（激光惯性 3D，小场地杀鸡用牛刀）、octomap_ser
 | 任务 | 权重 | 类别 | 说明 |
 |---|---|---|---|
 | 人偶立牌 | `weights/standee_yolo11n.pt` | `comm` / `non_comm` | 检**整块立牌**，再按类别计数 |
-| 车牌 | `weights/plate_yolo11n.pt` | `plate` | YOLO 框车牌 → 裁剪（外扩 10 px）→ HyperLPR3 **纯识别网络**读字符 |
-| 红绿灯 | `weights/traffic_light_yolo11n.pt` | `red` / `yellow` / `green_light` | ★ **直接检"亮着的那颗灯珠"**，框的类别就是灯态；**不做"先检灯箱再判色"** |
+| 车牌 | `weights/plate_yolo11n.pt` | `plate` | YOLO 框车牌 → **多边距/多尺度裁剪**（边距 10/5/0 + 紧裁剪放大 2 倍）→ HyperLPR3 **纯识别网络**读字符 → 按"7 位优先"选 |
+| 红绿灯 | `weights/traffic_light_yolo11n.pt`（`traffic_light_final2`）| `red_light` / `yellow_light` / `green_light` | ★ **直接检"亮着的那颗灯珠"**，框的类别就是灯态；**不做"先检灯箱再判色"** |
 
 推理默认走 **CPU**（`--device cpu`）：三个都是 yolo11n，CPU 上立牌 79 ms / 灯 42 ms / 车牌 113 ms 一张，
 够用；而 WSL 的显存和 Windows **共享**，跟 Gazebo 抢会 CUDA OOM，严重时把整个 WSL 带下去（实测踩过）。
@@ -187,7 +187,7 @@ rosrun competition_robot patrol.py \
   （用检出框反算世界坐标，深度由立牌已知高度定），避免把邻居算进来。
 * **红绿灯是通行闸**：红 / 黄灯（以及「没看到灯」）原地停车等待，**确认绿灯才放行**；等超时默认停车结束。
   节点在**一次请求内做 3 帧投票**，所以 `--light-confirm` 默认 1，不必再等第二轮。
-  灯时长见 `src/competition_arena/config/traffic_lights.yaml`（现为 绿 15 / 黄 3 / 红 10 s）。
+  灯时长见 `src/competition_arena/config/traffic_lights.yaml`（现为 **绿 15 / 黄 5 / 红 10 s**）。
 * 每次运行存档到 `vision_runs/<时间戳>/`：带框结果图 + `summary.txt` + `results.json`。
 * 用法 / 话题表 / **标注约定**见 [`docs/vision_run.md`](docs/vision_run.md)；
   采集世界布局见 [`docs/collect_world.md`](docs/collect_world.md)。
@@ -227,6 +227,17 @@ python3 tools/build_collect_world.py --ring-arc 60                  # 或弧形�
 
 `gen_collect_dataset.py` **只出图 + `meta.jsonl`**（位姿 / 灯态 / 车牌真值），**框由人在 X-AnyLabeling 里标**。
 
+**再加一条"比赛场地采集"**（2026-10-10 起）：机位就是 `recognition_points.yaml` 里的
+**真实识别点位**（位置 ±3 cm / 角度 ±4° 抖动），画面里带邻组背板、车道线、背景灯与车 ——
+信息量比采集世界高得多，**几十张就够**：
+
+```bash
+python3 tools/make_arena_layout.py                        # 导出比赛场地物料清单
+python3 tools/gen_collect_dataset.py --only-phase arena --arena 12 \
+    --arena-tasks standee,traffic_light,plate \          # 红绿灯自动循环三态
+    --layout src/competition_arena/config/arena_layout.yaml --out datasets/v2raw_arena
+```
+
 * 立牌两种摆放：**密集正方形**（边长 0.55 m、正面朝外、相机在外圈拍，每张强制「正面 + 别人背面」同框 ——
   专治「把别的立牌的白色背板认成人」）和**弧形圈多样拍摄**（正对 / 斜视 / 遮挡 / 纯背面四种配方 + 三档相机高度）。
 * 红绿灯 / 车牌按**方位角**扫（灯 ±40°/±20°/0°，车牌 ±30°/±15°/0°），因为只采正对时模型在竞技场斜视角会全漏。
@@ -246,7 +257,7 @@ tools/setup_vision_env.sh --cuda 121        # 或本机 CPU 版（见 docs/visio
 ## 九、验收
 
 ```bash
-./tools/acceptance.sh          # 一键 6 项：加载 / 话题 / 定位 / 雷达位姿 / 巡航 / 倒车入库
+./tools/acceptance.sh          # 一键 8 项 / 10 检查：加载 / 话题 / 定位 / 雷达位姿 / 巡航 / 倒车入库
 ```
 
 逐项标准、预期基线值与手动分步命令见 [`验收指南.md`](验收指南.md)。

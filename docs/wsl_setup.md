@@ -107,7 +107,7 @@ RViz 里 `2D Pose Estimate` 点一下车的位置 → `2D Nav Goal` 点目标，
 ## 3. 三条最常用的验收
 
 ```bash
-./tools/acceptance.sh --quick        # 6 项自动检查, 约 4 分钟 (全量约 12 分钟)
+./tools/acceptance.sh --quick        # 8 项 / 10 检查检查, 约 4 分钟 (全量约 12 分钟)
 ./tools/run_recognition_route.sh     # 跑 17 站巡检路线, 出轨迹图
 ./tools/run_recognition_route.sh --capture   # 顺带在 10 个识别点各拍 3 帧
 python3 tools/show_captures.py captures/     # 把一次拍摄拼成总览图

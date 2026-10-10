@@ -24,13 +24,13 @@ rosrun competition_robot patrol.py \
 [识别] ── tl_top（第1站）
          红绿灯: 绿灯（直接检灯珠, conf 0.94）
 [识别] ── car_1（第14站）
-         车牌: 苏A·B8Q62（conf 0.99）
+         车牌: 陕G·5JXFN（conf 0.99）
 
 ════════════ 识别汇总 ════════════
   街区 A: 共 6 人   社区 6 / 非社区 0
   街区 B: 共 4 人   社区 2 / 非社区 2
   红绿灯: tl_bot=红灯   tl_top=绿灯
-  车牌:   car_1=苏A·B8Q62   car_2=鄂D·7B5Q2   car_3=苏A·PL12A
+  车牌:   car_1=陕G·5JXFN   car_2=陕W·5QG5S   car_3=黑L·V006C
 ──────────────────────────────────
 ```
 
@@ -57,7 +57,7 @@ vision_runs/
 |---|---|---|---|
 | 人偶立牌 | `weights/standee_yolo11n.pt` | **整块立牌**，2 类（社区 / 非社区人员）| 框 + 类别 → 计数 |
 | 红绿灯 | `weights/traffic_light_yolo11n.pt` | ★ **直接检"亮着的那颗灯珠"**（3 类 red/yellow/green_light），**不是灯箱** | 框的类别 = 灯态 |
-| 车牌 | `weights/plate_yolo11n.pt` + HyperLPR3 | YOLO 框车牌 → 裁剪（外扩 10 px）→ HyperLPR3 读字符 | 车牌字符串 |
+| 车牌 | `weights/plate_yolo11n.pt` + HyperLPR3 | YOLO 框车牌 → **多边距/多尺度裁剪**（10/5/0 + 紧裁剪放大 2 倍）→ HyperLPR3 读字符 → **按"7 位优先"选** | 车牌字符串 |
 
 > 灯珠那条特别容易搞错：我们**不做"先检灯箱再判色"**，模型直接输出灯珠类别，
 > 所以代码里没有"找灯箱 / 按 15.6%-50%-84.4% 采样"那套逻辑。
