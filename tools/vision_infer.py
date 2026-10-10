@@ -173,7 +173,7 @@ def read_lights(image_bgr, conf=0.25, model=None, models_dir=None, device='cpu')
 
 # ---------------------------------------------------------------- 车牌
 def read_plate(image_bgr, conf=0.25, margin=10, model=None, models_dir=None,
-               return_all=False, device='cpu'):
+               return_all=False, device='cpu', want_len=7):
     """YOLO 框车牌 -> 裁剪(外扩 margin) -> HyperLPR3 读字符。-> (字符串, 置信度, 框)
 
     ★ margin 别给 0：HyperLPR3 的**检测器**要背景（紧裁剪会直接失败），
@@ -185,6 +185,12 @@ def read_plate(image_bgr, conf=0.25, margin=10, model=None, models_dir=None,
         return ('', 0.0, None)
     import plate_ocr
     import detect_ocr as D
+    import cv2 as _cv2
+
+    def _norm(t):
+        import re as _re
+        return _re.sub(r'[^0-9A-Za-z\u4e00-\u9fff]', '', str(t)).upper()
+
     r = m.predict(image_bgr, conf=conf, verbose=False, device=device)[0]
     boxes = [b for b in r.boxes if str(r.names[int(b.cls.item())]).lower() == 'plate']
     if not boxes:
@@ -193,12 +199,31 @@ def read_plate(image_bgr, conf=0.25, margin=10, model=None, models_dir=None,
     dets = []
     for b in boxes:
         box = [float(v) for v in b.xyxy[0].tolist()]
-        c = D.crop(image_bgr, box, margin)
-        text, tconf = plate_ocr.recognize(c) if c is not None else ('', 0.0)
-        dets.append((text, tconf, box))
+        # ★ 多边距/多尺度集成 (2026-10-10):
+        #   这个 OCR 的典型错误是**漏一位**(黑L·V006C -> 黑LV06C), 而漏位那次往往更自信,
+        #   所以"一次裁剪读出来就定音"很危险。同一检出框读 4 个变体:
+        #     边距 10 / 5 / 0  +  紧裁剪放大 2 倍, 再按"位数符合 7 位优先, 其次置信度"选。
+        for mg, scale in ((margin, 1.0), (max(0, margin // 2), 1.0), (0, 1.0),
+                          (max(0, margin // 5), 2.0)):
+            c = D.crop(image_bgr, box, mg)
+            if c is None:
+                continue
+            if scale != 1.0:
+                c = _cv2.resize(c, None, fx=scale, fy=scale,
+                                interpolation=_cv2.INTER_CUBIC)
+            text, tconf = plate_ocr.recognize(c)
+            dets.append((text, tconf, box))
     if return_all:
         return dets
-    return dets[0]
+    if not dets:
+        return ('', 0.0, None)
+
+    def _rank(d):
+        t, cf, _ = d
+        ok = 1 if (want_len and len(_norm(t)) == want_len) else 0
+        return (ok, cf)
+
+    return max(dets, key=_rank)
 
 
 # ---------------------------------------------------------------- CLI (单测用)

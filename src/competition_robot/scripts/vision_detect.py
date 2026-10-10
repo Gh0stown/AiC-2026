@@ -412,7 +412,7 @@ class VisionDetect(object):
         if kind in ('all', 'standee'):
             ds = []
             for f in frames:
-                ds += VI.read_standees(f, conf=self.a.conf, models_dir=self.a.models_dir,
+                ds += VI.read_standees(f, conf=self.a.standee_conf, models_dir=self.a.models_dir,
                                       device=self.a.device)
             ds = dedup(ds)
             exp = self._expected_boxes(point, pose) if self.a.attribute else None
@@ -667,11 +667,14 @@ def main():
     ap.add_argument('--no-show', dest='show', action='store_false')
     ap.add_argument('--attribute-mode', default='world', choices=['world', 'image'],
                     help='按什么归属: world=用检出框反算世界坐标(默认, 近距下稳得多) / image=旧的像素投影')
-    ap.add_argument('--attribute-radius', type=float, default=0.40,
-                    help='world 归属的匹配半径 m。组成员间距 0.09m、组间 >1m, '
-                         '0.40 仍安全。★ 2026-10-10: 原为 0.25, 实测 A_south 点位'
-                         '4 个立牌全被检出(conf 0.93), 但最左边那个的世界反算位置'
-                         '偏出 0.25m 被当成邻居丢掉 -> 报 3 个(真实 4)。放宽到 0.40 修复')
+    ap.add_argument('--standee-conf', type=float, default=0.20,
+                    help='立牌检测门限。★ 2026-10-10: 单独给立牌一个更低的门限 —— '
+                         '实测 A_north 那帧 conf 0.25 出 9 个、0.20 出 10 个, '
+                         '边缘立牌恰好在 0.20~0.25 之间飘; 灯/车牌仍用 --conf')
+    ap.add_argument('--attribute-radius', type=float, default=0.60,
+                    help='world 归属的匹配半径 m。组成员间距 0.09m、组间 >1m, 0.60 仍安全。'
+                         '★ 2026-10-10: 原 0.25 -> 0.40 (修 A_south 少一个) -> 0.60 '
+                         '(修 B_north: 远距离反算误差随距离变大, 0.40 仍会漏)')
     ap.add_argument('--attribute', dest='attribute', action='store_true', default=True,
                     help='按点位对应的那一组归属（默认开, 避免把邻居算进来）')
     ap.add_argument('--no-attribute', dest='attribute', action='store_false')
