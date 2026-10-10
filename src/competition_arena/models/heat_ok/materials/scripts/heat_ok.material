@@ -1,9 +1,0 @@
-material Panel
-{
-  technique { pass {
-    ambient 0.85 0.85 0.85 1
-    diffuse 1 1 1 1
-    emissive 0.45 0.55 0.45 1
-    texture_unit { texture panel.png }
-  } }
-}
