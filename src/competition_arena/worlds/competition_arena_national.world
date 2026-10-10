@@ -278,22 +278,22 @@
   <include>
     <uri>model://ebike</uri>
     <name>ebike_2</name>
-    <pose>0.7200 -0.8600 0 0 0 1.4500</pose>
+    <pose>0.6000 -0.9000 0 0 0 1.4500</pose>
   </include>
   <include>
     <uri>model://ebike_toppled</uri>
     <name>ebike_3</name>
-    <pose>0.8600 -0.6800 0 0 0 2.6000</pose>
+    <pose>0.4000 -0.6600 0 0 0 2.6000</pose>
   </include>
   <include>
     <uri>model://ebike</uri>
     <name>ebike_4</name>
-    <pose>0.9500 -0.9500 0 0 0 0.4000</pose>
+    <pose>0.4200 -0.9800 0 0 0 0.4000</pose>
   </include>
   <include>
     <uri>model://helmet</uri>
     <name>helmet_1</name>
-    <pose>0.6000 -0.6200 0 0 0 0.4000</pose>
+    <pose>0.3600 -0.5000 0 0 0 0.4000</pose>
   </include>
   <include>
     <uri>model://gauge</uri>
