@@ -362,11 +362,15 @@ class Patrol(object):
                          (rospy.Time.now() - t0).to_sec(), n_laser, n_amcl))
         return err_xy < pos_tol and err_yaw < yaw_tol
 
-    def rotate_to(self, target_yaw, tol=0.02, timeout=15.0):
+    def rotate_to(self, target_yaw, tol=0.05, timeout=20.0):
         """原地转到 target_yaw (rad). 返回最终误差(rad)"""
+        # ★ tol 默认 0.05 rad ≈ 2.9°：原来 0.02 rad ≈ 1.1° 比 AMCL 定位噪声还小，
+        #   到不了就耗满超时（实测"原地转向超时, 剩余误差 6.5~8.0 deg"）。
+        #   识别点位的像素预算都有 30~76% 余量，3° 的朝向误差完全无害。
         rate = rospy.Rate(20)
         t0 = rospy.Time.now()
         prev = None
+        stall = 0
         while not rospy.is_shutdown():
             p = self.pose()
             if p is None:
@@ -374,6 +378,14 @@ class Patrol(object):
             err = wrap(target_yaw - p[2])
             if abs(err) < tol:
                 break
+            if prev is not None and abs(err) > abs(prev) - 1e-3:
+                stall += 1                     # 残余不再变好 -> 提前收手, 别耗满超时
+                if stall > int(2.0 * 20):
+                    rospy.loginfo('  原地转向停滞 (残余 %.1f deg), 提前结束'
+                                  % math.degrees(err))
+                    break
+            else:
+                stall = 0
             if (rospy.Time.now() - t0).to_sec() > timeout:
                 rospy.logwarn('  原地转向超时, 剩余误差 %.1f deg' % math.degrees(err))
                 break
@@ -402,7 +414,25 @@ class Patrol(object):
         self.client.send_goal(g)
         ok = self.client.wait_for_result(rospy.Duration(timeout))
         st = self.client.get_state()
-        return ok and st == actionlib.GoalStatus.SUCCEEDED, st
+        if ok and st == actionlib.GoalStatus.SUCCEEDED:
+            return True, st
+        # ★ 超时的常见情形是"**还在走**"（action state=1 = ACTIVE），机器人并没卡死：
+        #   实测 12_bot_c / 13_car_3 就是这样被一次 60s 硬超时判失败的。
+        #   给一段宽限期：期间变成 SUCCEEDED、或已经离目标很近，就算这一段成功。
+        if st == actionlib.GoalStatus.ACTIVE:
+            t_end = time.time() + self.a.grace
+            while time.time() < t_end and not rospy.is_shutdown():
+                rospy.sleep(0.2)
+                if self.client.get_state() == actionlib.GoalStatus.SUCCEEDED:
+                    return True, actionlib.GoalStatus.SUCCEEDED
+                q = self.pose()
+                if q and math.hypot(q[0] - x, q[1] - y) <= self.a.grace_pos:
+                    self.client.cancel_goal()
+                    rospy.loginfo('     └ 超时宽限内已进入 %.2f m, 视为到点'
+                                  % self.a.grace_pos)
+                    return True, actionlib.GoalStatus.SUCCEEDED
+            st = self.client.get_state()
+        return False, st
 
     def go_to(self, name, x, y, yaw_final=None):
         t0 = time.time()
@@ -488,7 +518,11 @@ def clearance_note(x, y):
     """这个点原地转向还剩多少几何余量 (只考虑场地外墙)。"""
     margin = (INNER - max(abs(x), abs(y))) - FOOTPRINT_R
     if margin < 0:
-        return '  ✗ 转不开 (余量 %+.3f m)' % margin
+        # ★ 这**不是失败**：dry-run 的余量只按"外墙 + 车体外接半径"算，用来提示
+        #   move_base 在终点做原地转向可能被判碰撞；而本项目的到点摆正是用 cmd_vel
+        #   直接转（绕开规划器），所以余量为负的点位照样可用 —— 2026-10-10 两轮
+        #   验收 02_A_north / 04_A_west 都正常到点。
+        return '  ⚠ 原地转向几何余量 %+.3f m (按 cmd_vel 摆正, 不影响执行)' % margin
     if margin < SAFE_MARGIN:
         return '  ⚠ 旋转余量仅 %.3f m (定位误差就可能吃掉)' % margin
     return '  ✓ 旋转余量 %.3f m' % margin
@@ -501,7 +535,7 @@ def main():
     ap.add_argument('--no-return-start', action='store_true')
     ap.add_argument('--no-pre-rotate', dest='pre_rotate', action='store_false')
     ap.add_argument('--loop', action='store_true')
-    ap.add_argument('--timeout', type=float, default=60.0, help='每段超时(仿真秒)')
+    ap.add_argument('--timeout', type=float, default=80.0, help='每段超时(仿真秒)')
     ap.add_argument('--no-vision', action='store_true',
                     help='不做识别联动（不发 /vision/request）')
     ap.add_argument('--no-light-gate', action='store_true',
@@ -515,6 +549,11 @@ def main():
                     help='等灯上限(秒); 超时默认停车并结束本次运行')
     ap.add_argument('--light-none-go', action='store_true',
                     help='等超时后放行（默认不放行 —— 交通规则优先）')
+    ap.add_argument('--grace', type=float, default=15.0,
+                    help='move_base 超时后的宽限期(s): 若 action 仍是 ACTIVE(还在走), '
+                         '再等这么久; 期间到位或离目标 < grac-pos 就算到点')
+    ap.add_argument('--grace-pos', type=float, default=0.12,
+                    help='宽限期内的"视为到点"半径 (m)')
     ap.add_argument('--vision-timeout', type=float, default=6.0,
                     help='等识别结果的超时 (s)')
     ap.add_argument('--max-w', type=float, default=1.0, help='原地转向最大角速度')
