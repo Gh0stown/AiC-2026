@@ -667,8 +667,11 @@ def main():
     ap.add_argument('--no-show', dest='show', action='store_false')
     ap.add_argument('--attribute-mode', default='world', choices=['world', 'image'],
                     help='按什么归属: world=用检出框反算世界坐标(默认, 近距下稳得多) / image=旧的像素投影')
-    ap.add_argument('--attribute-radius', type=float, default=0.25,
-                    help='world 归属的匹配半径 m (组成员间距 0.09m, 组间 >1m, 0.25 很安全)')
+    ap.add_argument('--attribute-radius', type=float, default=0.40,
+                    help='world 归属的匹配半径 m。组成员间距 0.09m、组间 >1m, '
+                         '0.40 仍安全。★ 2026-10-10: 原为 0.25, 实测 A_south 点位'
+                         '4 个立牌全被检出(conf 0.93), 但最左边那个的世界反算位置'
+                         '偏出 0.25m 被当成邻居丢掉 -> 报 3 个(真实 4)。放宽到 0.40 修复')
     ap.add_argument('--attribute', dest='attribute', action='store_true', default=True,
                     help='按点位对应的那一组归属（默认开, 避免把邻居算进来）')
     ap.add_argument('--no-attribute', dest='attribute', action='store_false')
