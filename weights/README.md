@@ -11,7 +11,7 @@
 
 | 任务 | 入库文件 | 来自哪个 run | 训练数据目录 | 类别 |
 |---|---|---|---|---|
-| 人偶立牌 | `standee_yolo11n.pt` | **`person_strengthen`** | `datasets/detect/ring_20260925_102721` | `comm` / `non_comm` |
+| 人偶立牌 | `standee_yolo11n.pt` | **`standee_final`**（2026-10-10 换）| `datasets/detect/ring_20260925_102721` | `comm` / `non_comm` |
 | 车牌 | `plate_yolo11n.pt` | **`plate_final`** | `datasets/detect/plate_20260923_205130` | `plate` |
 | 红绿灯 | `traffic_light_yolo11n.pt` | **`traffic_light_final2`**（2026-10-09 换）| `datasets/detect/light_20261009_224439` | `red_light` / `yellow_light` / `green_light` |
 
@@ -77,3 +77,17 @@ val 指标奖励的是"把现有标签学准"，而实场失效模式（背板�
 旧权重留在 `traffic_light_yolo11n.pt.bak_20260923` 作对照。
 训练数据：`datasets/detect/light_20261009_224439`（3 类，train/val 划分）；
 日志：`train_logs/traffic_light_final2/`。
+
+## 换型说明（2026-10-10：人偶立牌）
+
+外观定稿（白板 + 贴图层、正面零留白、碰撞体严格 5×15×0.5 cm）后，旧 `person_strengthen`
+（2026-09-25）在验收里出现**类别混淆**：B 街区一个社区立牌被误判成非社区
+（conf 0.66），导致街区"社区/非社区"报 4/2、真值 5/1。
+
+用户用新数据集 `datasets/detect/person_20261010_193536` 重训 `standee_final`
+（yolo11n，80 轮早停）：**P 0.984 / R 1.000 / mAP50 0.995 / mAP50-95 0.985**
+（旧模型同口径 0.990 / 0.990 / 0.990 / 0.913）。
+
+> 说明：`datasets/v2_final/standee` 里那 60 张"比赛场地"帧已被用户剪去作训练集，
+> 因此无法再做"留出集"独立检验 —— 这类情形的独立检验只能靠**一键验收**（仿真真跑一遍）。
+旧权重留在 `standee_yolo11n.pt.bak_20260925` 作对照；日志在 `train_logs/standee_final/`。
