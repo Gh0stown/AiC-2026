@@ -421,6 +421,21 @@ class VisionDetect(object):
                 got = self.attribute_world(ds, point, pose)
                 if got[0] is not None:
                     kept, extra = got
+                    # ★ 救援: 世界归属对**远距离**目标的反算误差会超半径, 把本组立牌
+                    #   当成邻居丢掉。凡"强检出(>= rescue_conf) + 落在本组预期框内"的,
+                    #   无条件算本组; 邻居背板的检出分很低(0.07~0.10), 不会误纳。
+                    try:
+                        exp_r = self._expected_boxes(point, pose)
+                    except Exception:                       # noqa: BLE001
+                        exp_r = None
+                    if exp_r:
+                        kept_ids = set(id(k) for k in kept)
+                        resc = [d for d in ds if id(d) not in kept_ids
+                                and d['conf'] >= self.a.rescue_conf
+                                and hits_any(d['box'], exp_r, thr=0.10)]
+                        if resc:
+                            kept = kept + resc
+                            extra = max(0, len(ds) - len(kept))
                 else:
                     exp = None                              # 退化的信号, 下面会打 ⚠
             elif exp:
@@ -667,6 +682,12 @@ def main():
     ap.add_argument('--no-show', dest='show', action='store_false')
     ap.add_argument('--attribute-mode', default='world', choices=['world', 'image'],
                     help='按什么归属: world=用检出框反算世界坐标(默认, 近距下稳得多) / image=旧的像素投影')
+    ap.add_argument('--rescue-conf', type=float, default=0.50,
+                    help='救援门限: 归属没匹配上但置信度 >= 此值的检出, 若落在本组预期框内'
+                         '就仍算本组。★ 2026-10-10 B_north: 4 个自己的立牌全被检出'
+                         '(0.93/0.66/0.91/0.90, 其中 0.66 那个还被误判成 non_comm), '
+                         '但世界归属把它当邻居丢了 -> 报 3 个。邻居背板只有 0.07~0.10, '
+                         '所以 0.50 这条线既能救回来又不会把邻居算进来')
     ap.add_argument('--standee-conf', type=float, default=0.20,
                     help='立牌检测门限。★ 2026-10-10: 单独给立牌一个更低的门限 —— '
                          '实测 A_north 那帧 conf 0.25 出 9 个、0.20 出 10 个, '
