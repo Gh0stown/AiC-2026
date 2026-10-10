@@ -290,6 +290,8 @@ def main():
     ap.add_argument('--random-plates', type=int, default=3, dest='random_plates',
                     help='随机生成几块车牌 (默认 3 = 全部自造; 官方要求至少 2 块随机)')
     ap.add_argument('--seed', type=int, default=20261009, help='随机种子 (同种子得到同一组号牌)')
+    ap.add_argument('--plate-images', default='',
+                    help='直接用这个目录里的 car_N.png 号牌图 (不自己渲染)')
     ap.add_argument('--official', action='store_true',
                     help='用官方素材里的三张固定车牌图 (默认不用, 改为自己生成)')
     a = ap.parse_args()
@@ -318,7 +320,11 @@ def main():
         plan.append(dict(name='%s_%s' % (model, 'p'), model=model, plate=text,
                          parking=pname, x=LANE_X1 - 0.02, y=round(cy, 4)))
         if not a.show:
-            if rnd:
+            if a.plate_images:
+                pp = os.path.join(a.plate_images, '%s.png' % model)
+                if not os.path.isfile(pp):
+                    raise SystemExit('缺号牌图: %s' % pp)
+            elif rnd:
                 pp = os.path.join(tmpdir, '%s_plate.png' % model)
                 render_plate(text, pp)
             else:
