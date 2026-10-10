@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="bldg_11">
+    <static>true</static>
+    <link name="link">
+<visual name="mass"><pose>0 0 0.0390 0 0 0</pose><geometry><box><size>0.0400 0.0280 0.0780</size></box></geometry><material><script><uri>model://bldg_11/materials/scripts</uri><uri>model://bldg_11/materials/textures</uri><name>Facade</name></script></material></visual>
+      <collision name="mass_c_c"><pose>0 0 0.0390 0 0 0</pose><geometry><box><size>0.0400 0.0280 0.0780</size></box></geometry></collision>
+      <visual name="roof"><pose>0 0 0.0800 0 0 0</pose><geometry><box><size>0.0440 0.0320 0.004</size></box></geometry><material><ambient>0.62 0.61 0.58 1</ambient><diffuse>0.62 0.61 0.58 1</diffuse></material></visual>
+    </link>
+  </model>
+</sdf>

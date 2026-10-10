@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="gauge">
+    <static>true</static>
+    <link name="link">
+<visual name="base"><pose>0 0 0.005 0 0 0</pose><geometry><box><size>0.0450 0.0420 0.010</size></box></geometry><material><ambient>0.35 0.36 0.38 1</ambient><diffuse>0.35 0.36 0.38 1</diffuse></material></visual>
+      <collision name="base_c_c"><pose>0 0 0.005 0 0 0</pose><geometry><box><size>0.0450 0.0420 0.010</size></box></geometry></collision>
+      <visual name="panel"><pose>0 0 0.0928 0 0 0</pose><geometry><box><size>0.0900 0.0150 0.0736</size></box></geometry><material><script><uri>model://gauge/materials/scripts</uri><uri>model://gauge/materials/textures</uri><name>Dial</name></script></material></visual>
+      <collision name="panel_c_c"><pose>0 0 0.0928 0 0 0</pose><geometry><box><size>0.0900 0.0150 0.0736</size></box></geometry></collision>
+      <visual name="post"><pose>0 0 0.0320 0 0 0</pose><geometry><box><size>0.014 0.0150 0.0640</size></box></geometry><material><ambient>0.48 0.49 0.52 1</ambient><diffuse>0.48 0.49 0.52 1</diffuse></material></visual>
+      <visual name="tag"><pose>0 0.0105 0.0480 0 0 0</pose><geometry><box><size>0.0630 0.004 0.024</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse></material></visual>
+    </link>
+  </model>
+</sdf>

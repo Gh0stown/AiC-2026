@@ -1,0 +1,9 @@
+material Side
+{
+  technique { pass {
+    ambient 0.85 0.85 0.85 1
+    diffuse 1 1 1 1
+    emissive 0.20 0.20 0.20 1
+    texture_unit { texture side.png }
+  } }
+}

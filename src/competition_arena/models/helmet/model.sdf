@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="helmet">
+    <static>true</static>
+    <link name="link">
+<visual name="shell"><pose>0 0 0.0104 0 0 0</pose><geometry><sphere><radius>0.0160</radius></sphere></geometry><material><ambient>0.36 0.80 0.76 1</ambient><diffuse>0.36 0.80 0.76 1</diffuse></material></visual>
+      <collision name="shell_c"><pose>0 0 0.0104 0 0 0</pose><geometry><sphere><radius>0.0160</radius></sphere></geometry></collision>
+      <visual name="brim"><pose>-0.0035 0 0.0084 0 0 0</pose><geometry><box><size>0.0261 0.010 0.006</size></box></geometry><material><ambient>0.20 0.20 0.22 1</ambient><diffuse>0.20 0.20 0.22 1</diffuse></material></visual>
+    </link>
+  </model>
+</sdf>

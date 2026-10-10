@@ -236,49 +236,39 @@
     <!-- ===== 车辆+车牌结束 ===== -->
   <!-- BEGIN national -->
   <include>
-    <uri>model://bldg_a_fire</uri>
-    <name>bldg_a</name>
-    <pose>0.9500 1.3000 0 0 0 3.1416</pose>
+    <uri>model://bldg_15</uri>
+    <name>bldg_15</name>
+    <pose>1.0200 1.3400 0 0 0 3.1416</pose>
   </include>
   <include>
-    <uri>model://bldg_b</uri>
-    <name>bldg_b</name>
-    <pose>0.9500 0.5500 0 0 0 3.1416</pose>
+    <uri>model://bldg_11</uri>
+    <name>bldg_11</name>
+    <pose>1.0200 1.0200 0 0 0 3.1416</pose>
   </include>
   <include>
-    <uri>model://bldg_c</uri>
-    <name>bldg_c</name>
-    <pose>0.3500 -0.1000 0 0 0 3.1416</pose>
+    <uri>model://bldg_20</uri>
+    <name>bldg_20</name>
+    <pose>1.0600 0.4200 0 0 0 3.1416</pose>
   </include>
   <include>
-    <uri>model://bldg_d</uri>
-    <name>bldg_d</name>
-    <pose>-0.7000 -1.7200 0 0 0 0.0000</pose>
-  </include>
-  <include>
-    <uri>model://station</uri>
-    <name>station_1</name>
-    <pose>0.4200 -1.7200 0 0 0 0.0000</pose>
-  </include>
-  <include>
-    <uri>model://station</uri>
-    <name>station_2</name>
-    <pose>1.9500 -0.6000 0 0 0 -1.5708</pose>
-  </include>
-  <include>
-    <uri>model://bin_full</uri>
+    <uri>model://bin_red</uri>
     <name>bin_1</name>
-    <pose>0.6000 -0.2800 0 0 0 0.0000</pose>
+    <pose>0.3400 -0.0600 0 0 0 0.0000</pose>
   </include>
   <include>
-    <uri>model://bin_empty</uri>
+    <uri>model://bin_blue</uri>
     <name>bin_2</name>
-    <pose>0.6600 -0.3600 0 0 0 0.0000</pose>
+    <pose>0.4000 -0.1400 0 0 0 0.0000</pose>
   </include>
   <include>
-    <uri>model://bin_empty</uri>
+    <uri>model://bin_green</uri>
     <name>bin_3</name>
-    <pose>0.7200 -0.4400 0 0 0 0.0000</pose>
+    <pose>0.4600 -0.0600 0 0 0 0.0000</pose>
+  </include>
+  <include>
+    <uri>model://bin_gray</uri>
+    <name>bin_4</name>
+    <pose>0.5200 -0.1400 0 0 0 0.0000</pose>
   </include>
   <include>
     <uri>model://ebike</uri>
@@ -299,6 +289,21 @@
     <uri>model://ebike</uri>
     <name>ebike_4</name>
     <pose>0.9500 -0.9500 0 0 0 0.4000</pose>
+  </include>
+  <include>
+    <uri>model://helmet</uri>
+    <name>helmet_1</name>
+    <pose>0.6000 -0.6200 0 0 0 0.4000</pose>
+  </include>
+  <include>
+    <uri>model://gauge</uri>
+    <name>gauge_1</name>
+    <pose>0.4200 -1.7200 0 0 0 0.0000</pose>
+  </include>
+  <include>
+    <uri>model://gauge</uri>
+    <name>gauge_2</name>
+    <pose>1.9500 -0.6000 0 0 0 -1.5708</pose>
   </include>
   <include>
     <uri>model://sign</uri>
